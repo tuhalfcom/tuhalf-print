@@ -35,12 +35,12 @@ Program açılışta ve 4 saatte bir GitHub Releases'ta yeni sürüm arar. Yeni 
 
 **Yeni sürüm yayınlamak için:**
 1. `package.json` içindeki `"version"` değerini artır (ör. `1.0.1`).
-2. `git commit -am "v1.0.1"`, `git tag v1.0.1`, `git push`, `git push --tags`
-3. `.github/workflows/build.yml` Windows ve Mac kurulumlarını derleyip Releases'a yükler (birkaç dakika sürer).
+2. Değişikliği GitHub'a gönder (`git commit -am "v1.1.1"` ve `git push`).
+3. GitHub'da **Actions > Derle ve yayınla > Run workflow** de (ya da `git tag v1.1.1` ve `git push --tags`). Windows kurulumu derlenip `v1.1.1` adlı Release olarak yayınlanır (5-10 dk).
 
 Elle yayınlamak için: `GH_TOKEN=<token> npm run release:win`
 
-Depo adresi `package.json > build.publish` (`owner` / `repo`) ve `repository` alanlarında. Depo farklıysa ikisini de değiştir.
+Depo: https://github.com/tuhalfcom/tuhalf-print. Adres `package.json > build.publish` (`owner` / `repo`) ve `repository` alanlarında. Depo farklıysa ikisini de değiştir.
 Güncelleme kontrolünün şifresiz çalışması için Releases'ın bulunduğu depo **herkese açık** olmalı. Kaynak kod gizli kalacaksa kodu özel bir depoda tut, `publish` ayarını sadece sürümlerin yüklendiği ayrı ve herkese açık bir depoya (ör. `tuhalf-print-surumler`) yönlendir.
 Mac sürümü imzasız olduğu için kendini güncelleyemez; Mac'te buton indirme sayfasını açar.
 

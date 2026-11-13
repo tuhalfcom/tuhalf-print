@@ -1,6 +1,7 @@
 # Yeni sürüm yayınlama:
-#   1) package.json içindeki "version" değerini artır (ör. 1.0.1)
-#   2) git commit -am "v1.0.1" && git tag v1.0.1 && git push && git push --tags
+#   1) package.json içindeki "version" değerini artır (ör. 1.1.1) ve gönder
+#   2) GitHub > Actions > "Derle ve yayınla" > Run workflow  (ya da: git tag v1.1.1 && git push --tags)
+#   v<sürüm> etiketli Release kendiliğinden oluşturulur.
 # Bu iş Windows kurulumunu derleyip GitHub Releases'a yükler (Mac .dmg, Actions çıktısı olarak iner).
 # Ofisteki bilgisayarlar yeni sürümü kendiliğinden görür.
 name: Derle ve yayınla
@@ -23,7 +24,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - name: Derle ve yayınla
-        run: npx electron-builder --win --x64 --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        run: npx electron-builder --win --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
