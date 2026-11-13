@@ -24,9 +24,20 @@ jobs:
       - run: npm ci
       - run: npm test
       - name: Derle ve yayınla
-        run: npx electron-builder --win --x64 --publish always
+        run: npx electron-builder --win --x64 --publish never
+      - name: Release'e yükle
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          FILES="dist/Tuhalf-Print-Kurulum-$VER.exe dist/Tuhalf-Print-Kurulum-$VER.exe.blockmap dist/latest.yml"
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            gh release upload "v$VER" $FILES --clobber
+            gh release edit "v$VER" --draft=false --latest
+          else
+            gh release create "v$VER" $FILES --title "Tuhalf Print $VER" --target "$GITHUB_SHA" --latest
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: Tuhalf-Print-Windows
