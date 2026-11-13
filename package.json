@@ -1,0 +1,87 @@
+{
+  "name": "tuhalf-print",
+  "productName": "Tuhalf Print",
+  "version": "1.1.0",
+  "description": "Tuhalf siparis baski dosyalarini indirir, rulo sayfalara dizer ve Photoshop ile basar.",
+  "author": "Tuhalf",
+  "main": "src/main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/run.js",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "release:win": "electron-builder --win --x64 --publish always"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.tuhalf.print",
+    "productName": "Tuhalf Print",
+    "copyright": "Tuhalf",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/icon.ico",
+      "build/tray.png",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Tuhalf-Print-Kurulum-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tuhalf Print",
+      "language": "1055"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "artifactName": "Tuhalf-Print-${version}-mac.${ext}",
+      "identity": null
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "tuhalfcom",
+        "repo": "tuhalf-print",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tuhalfcom/tuhalf-print.git"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  }
+}
