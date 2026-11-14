@@ -60,28 +60,38 @@ function pickBalance(d) {
   if (d == null) return null;
   if (typeof d === 'number' || (typeof d === 'string' && d.trim() !== '' && Number.isFinite(Number(d)))) return Number(d);
   if (typeof d !== 'object') return null;
-  for (const key of ['balance', 'availableBalance', 'totalBalance', 'creditBalance', 'amount', 'value']) {
-    if (d[key] != null && Number.isFinite(Number(d[key]))) return Number(d[key]) - (key === 'creditBalance' && Number.isFinite(Number(d.debitBalance)) ? Number(d.debitBalance) : 0);
-  }
+  const num = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null);
+  for (const key of ['balance', 'availableBalance', 'totalBalance', 'currentBalance']) if (num(d[key]) != null) return num(d[key]);
+  if (num(d.creditBalance) != null) return num(d.creditBalance) - (num(d.debitBalance) || 0);
+  for (const [key, v] of Object.entries(d)) if (/balance|bakiye/i.test(key) && !/debit|debt|bonus|limit|borc/i.test(key) && num(v) != null) return num(v);
   for (const v of Object.values(d)) if (v && typeof v === 'object') { const n = pickBalance(v); if (n != null) return n; }
   return null;
 }
+// Geliver panelinin kullandigi yol: /organizations -> /organizations/{id}/balance; olmazsa /user/balance
 async function geliverBalance(token, fetchFn = fetch) {
   const H = { Authorization: 'Bearer ' + token };
-  let first = null;
+  const notes = [];
+  let org = null;
+  try {
+    const j = await getJson(`${GELIVER_API}/organizations`, H, fetchFn);
+    org = Array.isArray(j.data) ? j.data[0] : j.data;
+  } catch (e) { notes.push('organizations: ' + e.message); }
+  if (org && org.id) {
+    try {
+      const j = await getJson(`${GELIVER_API}/organizations/${encodeURIComponent(org.id)}/balance`, H, fetchFn);
+      const n = pickBalance(j.data !== undefined ? j.data : j);
+      if (n != null) return n;
+      notes.push('org balance yanıtı: ' + JSON.stringify(j).slice(0, 100));
+    } catch (e) { notes.push('org balance: ' + e.message); }
+  }
   try {
     const j = await getJson(`${GELIVER_API}/user/balance`, H, fetchFn);
     const n = pickBalance(j.data !== undefined ? j.data : j);
     if (n != null) return n;
-    first = 'yanıt: ' + JSON.stringify(j).slice(0, 120);
-  } catch (e) { first = e.message; }
-  try {
-    const j = await getJson(`${GELIVER_API}/organizations`, H, fetchFn);
-    const org = Array.isArray(j.data) ? j.data[0] : j.data;
-    const n = org ? pickBalance({ creditBalance: org.creditBalance, debitBalance: org.debitBalance, balance: org.balance }) : null;
-    if (n != null) return n;
-  } catch { /* */ }
-  throw new Error('Bakiye okunamadı (' + first + ')');
+    notes.push('user balance yanıtı: ' + JSON.stringify(j).slice(0, 100));
+  } catch (e) { notes.push('user balance: ' + e.message); }
+  if (org) { const n = pickBalance({ creditBalance: org.creditBalance, debitBalance: org.debitBalance }); if (n != null) return n; }
+  throw new Error('Bakiye okunamadı (' + notes.join(' · ') + ')');
 }
 async function geliverShipment(token, id, fetchFn = fetch) {
   const j = await getJson(`${GELIVER_API}/shipments/${encodeURIComponent(id)}`, { Authorization: 'Bearer ' + token }, fetchFn);
