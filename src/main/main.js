@@ -34,7 +34,7 @@ function defaults() {
     colorWords: ['Siyah', 'Beyaz', 'Ahsap', 'Naturel', 'Ceviz', 'Gold', 'Altin', 'Gumus', 'Silver', 'Mese'],
     print: { rollWidthMm: 609.6, maxLengthMm: 720.01, marginMm: 3, gapMm: 1, dpi: 300, portraitLocked: [] },
     card: { enabled: true, file: '', wMm: 0, hMm: 0, maxPerSheet: 0 },
-    photoshopPath: '', schema: 2,
+    photoshopPath: '', schema: 3,
   };
 }
 
@@ -93,14 +93,20 @@ function publicStatus() { return { ...status, platform: process.platform, versio
 function notify(title, body) { try { if (Notification.isSupported()) new Notification({ title, body, icon: ICON }).show(); } catch { /* */ } }
 
 // ---------------- Indirme dongusu ----------------
-async function checkNow() {
+async function checkNow(opts = {}) {
   if (status.running) return { busy: true };
   status.running = true; status.lastError = null; pushStatus();
   const done = new Set(state.data.downloaded || []);
   try {
-    log('info', 'Yeni siparişler kontrol ediliyor…');
-    const r = await runDownload(config.data, done, log);
+    const redo = Number(opts.redownloadFrom) || 0;
+    log('info', redo ? `#${redo} ve sonraki siparişler yeniden indiriliyor…` : 'Yeni siparişler kontrol ediliyor…');
+    const cfg = redo ? { ...config.data, redownloadFrom: redo, lookbackDays: Math.max(120, config.data.lookbackDays || 0) } : config.data;
+    const r = await runDownload(cfg, done, log);
     state.set({ downloaded: Array.from(done).slice(-5000) });
+    if (redo) {
+      log('ok', `Yeniden indirme bitti: ${r.files.length} dosya indi` + (r.skipped ? `, ${r.skipped} dosya zaten vardı` : '') + (r.files.length ? ` → ${r.folderName}` : '') + '.');
+      if (r.files.length) send('refresh');
+    } else
     log(r.files.length ? 'ok' : 'info', r.files.length ? `${r.files.length} dosya indi → ${r.folderName}` : 'Yeni baskı dosyası yok.');
     if (r.pending.length) log('info', 'Bekleyen: ' + r.pending.join(', '));
     if (r.files.length) { notify('Tuhalf Print', `${r.files.length} yeni baskı dosyası indi`); send('refresh'); }
@@ -135,7 +141,7 @@ function cardCfg() {
 }
 function packCfg() {
   const p = config.data.print;
-  return { width: +p.rollWidthMm, maxLength: +p.maxLengthMm, margin: +p.marginMm, gap: +p.gapMm, card: cardCfg() };
+  return { width: +p.rollWidthMm, maxLength: +p.maxLengthMm, margin: +p.marginMm, gap: Math.max(1, +p.gapMm || 0), card: cardCfg() };
 }
 function plan(force) {
   const { items, bad, newestFolder } = F.pendingItems(downloadDir(), config.data.print.portraitLocked, state.data.arranged || {});
@@ -279,6 +285,21 @@ ipcMain.handle('sheets', () => {
   });
 });
 ipcMain.handle('check-now', () => checkNow());
+ipcMain.handle('open-in-ps', (_e, p) => {
+  if (!p || !fs.existsSync(p)) return { error: 'Dosya bulunamadı.' };
+  const exe = PS.findPhotoshop(config.data.photoshopPath);
+  if (!exe) { shell.openPath(p); return { error: 'Photoshop bulunamadı, dosya varsayılan programla açıldı.' }; }
+  const { spawn } = require('child_process');
+  if (process.platform === 'darwin') spawn('open', ['-a', exe, p], { detached: true, stdio: 'ignore' }).unref();
+  else spawn(exe, [p], { detached: true, stdio: 'ignore' }).unref();
+  log('info', `${path.basename(p)} Photoshop'ta açılıyor…`);
+  return { ok: true };
+});
+ipcMain.handle('redownload', (_e, from) => {
+  const n = parseInt(from, 10);
+  if (!(n > 0)) return { error: 'Geçerli bir sipariş numarası girin.' };
+  return checkNow({ redownloadFrom: n });
+});
 ipcMain.handle('build', async (_e, force) => { try { return await buildSheets(force); } catch (e) { log('error', e.message); return { error: e.message }; } });
 ipcMain.handle('print', async (_e, paths) => { try { return await printSheets(paths); } catch (e) { log('error', e.message); return { error: e.message }; } });
 ipcMain.handle('mark-printed', (_e, p, on) => {
@@ -365,9 +386,15 @@ app.whenReady().then(() => {
   config = new JsonStore(path.join(app.getPath('userData'), 'config.json'), defaults());
   state = new JsonStore(path.join(app.getPath('userData'), 'state.json'), { downloaded: [], printed: {} });
   importLegacy();
-  if ((config.data.schema || 1) < 2) {
-    // v1 -> v2: sabit 609,6 x 720,01 sayfa, 1 mm ara bosluk, dik kalma zorunlulugu yok
-    config.set({ schema: 2, print: { ...config.data.print, rollWidthMm: 609.6, maxLengthMm: 720.01, gapMm: 1, portraitLocked: [] } });
+  // Ayar gecisi: dosyada kayitli surume bakilir (varsayilanlarla birlesmis veriye degil)
+  const savedSchema = Number(config._read().schema) || 1;
+  if (savedSchema < 3) {
+    const pr = config.data.print;
+    config.set({ schema: 3, print: {
+      ...pr, rollWidthMm: 609.6, maxLengthMm: 720.01, gapMm: Math.max(1, Number(pr.gapMm) || 0),
+      ...(savedSchema < 2 ? { portraitLocked: [] } : {}),
+    } });
+    log('info', 'Baskı ayarları güncellendi: sayfa 609,6 x 720,01 mm, tasarımlar arası en az 1 mm.');
   }
   updater = createUpdater({
     log, send, notify,

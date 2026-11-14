@@ -55,6 +55,10 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.strictEqual(r.sheets.length, 1); assert.strictEqual(r.waiting.length, 1);
     assert.ok(r.sheets[0].items.filter((p) => p.item.w === 300).every((p) => !p.rotated));
   });
+  await t('Ara bosluk ayari 0 olsa bile tasarimlar arasi en az 1 mm', () => {
+    const r = packAll(mk(['30x42', '15x21', '15x21', '21x30', '30x42', '30x42']), { ...cfg, gap: 0, card: { w: 90, h: 140, file: 'k' } });
+    r.sheets.forEach((s) => noOverlap(s, 1));
+  });
   await t('50x70 yanina ve bosluklara tesekkur karti', () => {
     const r = packAll(mk(['50x70']), { ...cfg, card: { w: 100, h: 200, file: 'k.png' } });
     const cards = r.sheets[0].items.filter((p) => p.item.isCard);
@@ -136,6 +140,12 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
   });
   const r2 = await runDownload(conf, done, () => {});
   await t('Ikinci calismada tekrar indirmez', () => assert.strictEqual(r2.files.length, 0));
+  const r3 = await runDownload({ ...conf, redownloadFrom: 2267 }, done, () => {});
+  await t('Yeniden indir: dosya zaten varsa kopya olusturmaz', () => { assert.strictEqual(r3.files.length, 0); assert.strictEqual(r3.skipped, 2); });
+  for (const f of fs.readdirSync(r.folder)) if (f.startsWith('2267')) fs.rmSync(path.join(r.folder, f));
+  const r4 = await runDownload({ ...conf, redownloadFrom: 2267 }, done, () => {});
+  await t('Yeniden indir: #2267 ve sonrasi tekrar iner, oncekiler inmez (yeni bilgisayar)', () =>
+    assert.deepStrictEqual(r4.files.sort(), ['2267-15x21-Cercevesiz-Urun-2.png', '2267-21x30-Beyaz-Urun-1-2Adet.png']));
   srv.close();
   fs.rmSync(root, { recursive: true, force: true });
   console.log(`\n${pass} test gecti.`);

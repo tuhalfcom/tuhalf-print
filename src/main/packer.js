@@ -155,7 +155,8 @@ function placeCards(occupied, region, card, g, max) {
 // cfg: {width, maxLength, margin, gap, rowSlack?, card?: {w, h, file, max}}
 // opts.force: tam satir olusmasa da bekleyenleri de diz
 function packAll(items, cfg, opts = {}) {
-  cfg = { rowSlack: 6, ...cfg };
+  // Yan yana / ust uste gelen tasarimlar arasinda her zaman en az 1 mm bosluk
+  cfg = { rowSlack: 6, ...cfg, gap: Math.max(1, Number(cfg.gap) || 0) };
   const m = cfg.margin, g = cfg.gap;
   const W = cfg.width - 2 * m, L = cfg.maxLength - 2 * m;
   const skipped = [], pool = [];

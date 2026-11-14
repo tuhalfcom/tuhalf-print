@@ -12,7 +12,7 @@ Shopify siparişlerinin baskı dosyalarını indirir, rulo sayfalara dizer, Phot
 > İlk kurulumda Photoshop'ta bir sayfayı **Dosya > Yazdır** ile elle bir kez bas (yazıcı: Canon GP-2600S, 609,6 mm rulo, %100 ölçek, üst/alt boşlukları basma). Photoshop bu ayarları hatırlar; Print butonu hep bunları kullanır.
 
 ## Kurallar
-- Sayfa (canvas) her zaman **609,6 x 720,01 mm**. Kenar boşluğu 3 mm, tasarımlar arası **1 mm**.
+- Sayfa (canvas) her zaman **609,6 x 720,01 mm**. Kenar boşluğu 3 mm. Yan yana ya da üst üste gelen tasarımlar arasında **her zaman en az 1 mm** boşluk bırakılır (ayara 0 yazılsa bile).
 - Siparişler eskiden yeniye dizilir. Tüm ebatlar gerekirse 90° döner. Örneğin tek başına basılan 30x42 yatay yerleşir. Hiç dönmemesi gereken ebat varsa Ayarlar > Baskı'ya yazılır.
 - Tasarımlar sayfa genişliğini dolduran satırlar halinde dizilir (ör. 30x42 + yanında 2 × 15x21 ve yatay 21x30).
 - Tam satır oluşturamayan **fazla tasarım bekletilir** ve sonra gelen siparişlerin yanına dizilir. **"Bekleyenleri de diz"** seçilirse hepsi hemen dizilir.
@@ -20,6 +20,8 @@ Shopify siparişlerinin baskı dosyalarını indirir, rulo sayfalara dizer, Phot
 - **Sayfaları hazırla** ile oluşan PSD'ler Photoshop'ta açık kalır, operatör kontrol eder. Baskı yalnızca uygulamadaki **Print** ile alınır. Açık sayfada düzeltme yapıldıysa önce kaydedilip öyle basılır.
 - Basılan sayfadaki siparişler, Siparişler listesinde yeşil **Basıldı** olur. Photoshop'tan elle basılan sayfa, sayfa kartındaki **Basıldı** butonuyla işaretlenir.
 - 18:00'den sonra inenler ertesi günün klasörüne yazılır.
+- **Hazır sayfalar**'da her sayfa için **Photoshop'ta aç** butonu PSD'yi doğrudan Photoshop'ta açar.
+- **Yeni bilgisayara kurulum / sıfırlama:** Tercihler > Sıfırlama'da sipariş numarasını girip **Yeniden indir** de. O sipariş ve sonrasındaki baskı dosyaları tekrar iner (son 120 gün). Klasörde zaten olan dosyalar tekrar inmez.
 - Klasörler: `Masaüstü\BASKI\GG-AA-YY-SIPARISLER\`: `_Dizildi` (dizilen kaynaklar), `_Sayfalar` (PSD sayfalar).
 
 ## Derleme (geliştirici)

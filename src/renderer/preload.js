@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('api', {
   checkNow: () => ipcRenderer.invoke('check-now'),
   build: (force) => ipcRenderer.invoke('build', force),
   markPrinted: (p, on) => ipcRenderer.invoke('mark-printed', p, on),
+  redownload: (from) => ipcRenderer.invoke('redownload', from),
+  openInPhotoshop: (p) => ipcRenderer.invoke('open-in-ps', p),
   pickCard: () => ipcRenderer.invoke('pick-card'),
   cardThumb: () => ipcRenderer.invoke('card-thumb'),
   print: (paths) => ipcRenderer.invoke('print', paths),

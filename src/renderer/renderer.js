@@ -97,7 +97,8 @@ async function loadPlan() {
     : 'Dizilecek dosya yok';
   $('#btnBuild').disabled = !p.sheets.length || !!STATUS.job;
   $('#btnBuild').lastChild.textContent = p.sheets.length ? `Sayfaları hazırla (${p.sheets.length})` : 'Sayfaları hazırla';
-  $('#rollInfo').textContent = CFG ? `Sayfa ${CFG.print.rollWidthMm} x ${CFG.print.maxLengthMm} mm · ara ${CFG.print.gapMm} mm` : '';
+  const fmt = (n) => String(n).replace('.', ',');
+  $('#rollInfo').textContent = CFG ? `${fmt(CFG.print.rollWidthMm)} × ${fmt(CFG.print.maxLengthMm)} mm · ara ${fmt(Math.max(1, CFG.print.gapMm))} mm` : '';
   const wb = $('#waitingBox');
   const showWait = p.waiting.length || FORCE;
   wb.classList.toggle('hidden', !showWait);
@@ -106,13 +107,13 @@ async function loadPlan() {
   $('#waitingList').innerHTML = p.waiting.map((n) => `<span class="tag">${esc(n)}</span>`).join('') || (FORCE ? '<span class="muted small">Tüm tasarımlar sayfalara yerleşti.</span>' : '');
   let html = p.sheets.map((s, n) => {
     const designs = s.items.filter((i) => !i.card).length;
-    return `<div class="sheet-card">
+    return `<div class="artboard">
+      <div class="artboard-title"><b>Sayfa ${n + 1}</b><span>${designs} baskı${s.cards ? ` · ${s.cards} kart` : ''}</span></div>
       ${paperHtml(s, s.items)}
-      <div class="sheet-info"><b>Sayfa ${n + 1}</b><span class="muted small">${designs} baskı${s.cards ? ` · ${s.cards} kart` : ''}</span></div>
     </div>`;
   }).join('');
-  if (p.skipped.length) html += `<div class="sheet-card"><b>Ruloya sığmayan</b><span class="muted small">${p.skipped.map(esc).join('<br>')}</span></div>`;
-  if (p.bad.length) html += `<div class="sheet-card"><b>Adı okunamayan</b><span class="muted small">${p.bad.map(esc).join('<br>')}</span></div>`;
+  if (p.skipped.length) html += `<div class="artboard"><div class="waiting"><b>Ruloya sığmayan</b><div class="muted small">${p.skipped.map(esc).join('<br>')}</div></div></div>`;
+  if (p.bad.length) html += `<div class="artboard"><div class="waiting"><b>Adı okunamayan</b><div class="muted small">${p.bad.map(esc).join('<br>')}</div></div></div>`;
   $('#plan').innerHTML = html || `<p class="muted small">${p.waiting.length ? 'Tam satır oluşturacak kadar tasarım yok. Yeni siparişler geldikçe dizilir.' : 'Yeni dosyalar indikçe yerleşim burada oluşur.'}</p>`;
 }
 
@@ -122,6 +123,7 @@ async function loadSheets() {
   const unprinted = SHEETS.filter((s) => !s.printedAt);
   $('#btnPrintAll').disabled = !unprinted.length || !!STATUS.job;
   $('#btnPrintAll').lastChild.textContent = unprinted.length ? `Basılmamışları bas (${unprinted.length})` : 'Basılmamışları bas';
+  $('#sheetsCount').textContent = unprinted.length ? `${unprinted.length}/${SHEETS.length}` : SHEETS.length;
   $('#sheets').innerHTML = SHEETS.map((s) => {
     const m = s.meta;
     const preview = m ? paperHtml(m, m.items) : '<div class="paper" style="aspect-ratio:610/420"></div>';
@@ -132,8 +134,9 @@ async function loadSheets() {
       <div class="muted small">${esc(dayLabel(s.folder))}${m ? ` · ${m.items.filter((i) => !i.card).length} baskı` : ''}${m && m.items.some((i) => i.card) ? ` · ${m.items.filter((i) => i.card).length} kart` : ''}</div>
       <div class="sheet-actions">
         <button class="btn print small${s.printedAt ? ' done' : ''}" data-print="${esc(s.path)}"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg>${s.printedAt ? 'Tekrar bas' : 'Print'}</button>
-        <button class="btn ghost small" data-show="${esc(s.path)}" title="Klasörde göster">PSD</button>
-        <button class="btn ghost small${s.printedAt ? ' done' : ''}" data-mark="${esc(s.path)}" data-on="${s.printedAt ? '' : '1'}" title="${s.printedAt ? 'Basılmadı olarak işaretle' : 'Photoshop\'tan elle bastıysanız işaretleyin'}">${s.printedAt ? '✓' : 'Basıldı'}</button>
+        <button class="btn small ps" data-ps="${esc(s.path)}" title="PSD dosyasını Photoshop'ta aç">Photoshop'ta aç</button>
+        <button class="btn ghost small" data-show="${esc(s.path)}" title="Klasörde göster">Klasörde göster</button>
+        <button class="btn ghost small${s.printedAt ? ' done' : ''}" data-mark="${esc(s.path)}" data-on="${s.printedAt ? '' : '1'}" title="${s.printedAt ? 'Basılmadı olarak işaretle' : 'Photoshop\'tan elle bastıysanız işaretleyin'}">${s.printedAt ? '✓ Basıldı' : 'Basıldı işaretle'}</button>
       </div>
     </div>`;
   }).join('') || `<div class="empty">${ICON_EMPTY}<div>Hazır sayfa yok</div></div>`;
@@ -191,8 +194,12 @@ function openDrawer(open) { $('#drawer').classList.toggle('open', open); $('#dra
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],.order');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],.order');
   if (!t) return;
+  if (t.dataset.view) return setView(t.dataset.view);
+  if (t.dataset.goto) return gotoPref(t.dataset.goto);
+  if (t.dataset.scroll) { $('#orders').scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (t.dataset.ps) { const r = await window.api.openInPhotoshop(t.dataset.ps); if (r && r.error) toast(r.error, true); else toast('Photoshop\'ta açılıyor…'); return; }
   if (t.dataset.mark) { await window.api.markPrinted(t.dataset.mark, !!t.dataset.on); return refreshAll(); }
   if (t.dataset.open) return window.api.openPath(t.dataset.open);
   if (t.dataset.show) return window.api.showItem(t.dataset.show);
@@ -215,8 +222,43 @@ async function doPrint(paths) {
 $('#btnCheck').onclick = async () => { const r = await window.api.checkNow(); if (r && r.error) toast(r.error, true); };
 $('#btnBuild').onclick = async () => {
   const r = await window.api.build(FORCE);
-  if (r.error) toast(r.error, true); else toast(`${(r.sheets || []).filter((s) => s.ok).length} sayfa hazır · Photoshop'ta kontrol edip Print'e basın`);
+  if (r.error) toast(r.error, true);
+  else { toast(`${(r.sheets || []).filter((s) => s.ok).length} sayfa hazır · Photoshop'ta kontrol edip Print'e basın`); setView('sheets'); }
   FORCE = false;
+};
+
+// ---------- Gorunum (Yerlesim / Sayfalar) ----------
+function setView(v) {
+  for (const el of document.querySelectorAll('.view')) el.classList.toggle('hidden', el.id !== 'view-' + v);
+  for (const el of document.querySelectorAll('.tool[data-view], .doc-tab[data-view]')) el.classList.toggle('active', el.dataset.view === v);
+}
+$('#toolCheck').onclick = () => $('#btnCheck').click();
+$('#toolFolder').onclick = () => CFG && window.api.openPath(CFG.downloadDir);
+$('#toolPrefs').onclick = $('#menuPrefs').onclick = () => openDrawer(true);
+
+// ---------- Tercihler gezinme ----------
+function gotoPref(id) {
+  const el = document.getElementById(id); if (!el) return;
+  $('#settingsForm').scrollTo({ top: el.offsetTop - 8, behavior: 'smooth' });
+  for (const a of document.querySelectorAll('.pref-nav a')) a.classList.toggle('active', a.dataset.goto === id);
+}
+$('#settingsForm').addEventListener('scroll', () => {
+  const f = $('#settingsForm'); let cur = 'set-app';
+  for (const a of document.querySelectorAll('.pref-nav a')) { const h = document.getElementById(a.dataset.goto); if (h && h.offsetTop - 40 <= f.scrollTop) cur = a.dataset.goto; }
+  if (f.scrollTop + f.clientHeight >= f.scrollHeight - 4) cur = 'set-reset';
+  for (const a of document.querySelectorAll('.pref-nav a')) a.classList.toggle('active', a.dataset.goto === cur);
+});
+$('#btnCancel').onclick = () => { if (CFG) fillSettings(CFG); openDrawer(false); };
+$('#btnRedownload').onclick = async () => {
+  const n = parseInt($('#redoFrom').value, 10);
+  if (!(n > 0)) return toast('Sipariş numarası girin (ör. 2266).', true);
+  const b = $('#btnRedownload'); b.disabled = true; b.textContent = 'İndiriliyor…';
+  try {
+    const r = await window.api.redownload(n);
+    if (r && r.busy) toast('Şu an kontrol yapılıyor, birazdan tekrar deneyin.', true);
+    else if (r && r.error) toast(r.error, true);
+    else { toast(`#${n} ve sonrası: ${r.files.length} dosya indi` + (r.skipped ? `, ${r.skipped} zaten vardı` : '')); refreshAll(); }
+  } finally { b.disabled = false; b.textContent = 'Yeniden indir'; }
 };
 $('#forceAll').onchange = (e) => { FORCE = e.target.checked; loadPlan(); };
 $('#btnPrintAll').onclick = () => doPrint(SHEETS.filter((s) => !s.printedAt).map((s) => s.path).reverse());
@@ -280,7 +322,7 @@ window.api.on('refresh', refreshAll);
   const d = await window.api.init();
   CFG = d.config; STATUS = d.status;
   document.body.classList.toggle('mac', d.status.platform === 'darwin');
-  $('#ver').textContent = `Baskı merkezi · v${d.status.version}`;
+  $('#ver').textContent = `v${d.status.version}`;
   fillSettings(CFG); setPsFound(d.photoshop); renderCard();
   UPD = d.update || {}; renderUpdate();
   d.logs.forEach(addLog);

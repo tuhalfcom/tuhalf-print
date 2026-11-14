@@ -7,83 +7,110 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <img src="../../build/icon.png" alt="" class="logo" />
-      <div><div class="brand-name">Tuhalf Print</div><div class="brand-sub" id="ver">Baskı merkezi</div></div>
-    </div>
-    <div class="top-status" id="topStatus"><span class="dot"></span><span id="statusText">Hazırlanıyor…</span></div>
-    <div class="top-actions">
+  <!-- Uygulama cubugu -->
+  <header class="appbar">
+    <div class="brand"><img src="../../build/icon.png" alt="" class="logo" /><span class="brand-name">Tuhalf Print</span><span class="brand-sub" id="ver">—</span></div>
+    <nav class="menus">
+      <button class="menu" data-view="plan">Yerleşim</button>
+      <button class="menu" data-view="sheets">Sayfalar</button>
+      <button class="menu" data-scroll="orders">Siparişler</button>
+      <button class="menu" id="menuPrefs">Tercihler</button>
+    </nav>
+    <div class="appbar-right">
       <button class="btn update hidden" id="btnUpdateTop" title="Güncelleme"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span id="updTopText">Güncelleme</span></button>
-      <button class="btn ghost" id="btnCheck"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Şimdi kontrol et</button>
-      <button class="icon-btn" id="btnSettings" title="Ayarlar"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button class="icon-btn" id="btnSettings" title="Tercihler"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </div>
   </header>
 
-  <main class="grid">
-    
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>Siparişler</h2>
-          <p class="muted" id="ordersSummary">—</p>
-        </div>
-        <div class="legend"><span class="chip unprinted">Basılmadı</span><span class="chip printed">Basıldı</span></div>
-      </div>
-      <div class="panel-body scroll" id="orders"></div>
-    </section>
+  <!-- Secenek cubugu -->
+  <div class="optbar">
+    <button class="btn" id="btnCheck"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Şimdi kontrol et</button>
+    <div class="top-status" id="topStatus"><span class="dot"></span><span id="statusText">Hazırlanıyor…</span></div>
+    <span class="sep"></span>
+    <span class="opt-text" id="planSummary">—</span>
+    <span class="sep"></span>
+    <label class="switch" title="Tam satır oluşturmayan bekleyen tasarımları da diz"><input type="checkbox" id="forceAll" /><span>Bekleyenleri de diz</span></label>
+    <span class="grow"></span>
+    <button class="btn primary" id="btnBuild" disabled><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>Sayfaları hazırla</button>
+    <button class="btn" id="btnPrintAll" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Basılmamışları bas</span></button>
+  </div>
 
-    
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>Baskı</h2>
-          <p class="muted" id="planSummary">—</p>
-        </div>
-        <button class="btn primary" id="btnBuild" disabled><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>Sayfaları hazırla</button>
-      </div>
-      <div class="panel-body scroll">
-        <div class="sub-head"><span>Sıradaki yerleşim</span><span class="muted small" id="rollInfo"></span></div>
-        <div class="plan-strip" id="plan"></div>
+  <!-- Arac seridi -->
+  <aside class="tools">
+    <button class="tool active" data-view="plan" title="Sıradaki yerleşim"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="11"/><rect x="13" y="3" width="8" height="5"/><rect x="13" y="10" width="8" height="4"/><rect x="3" y="16" width="18" height="5"/></svg></button>
+    <button class="tool" data-view="sheets" title="Hazır sayfalar"><svg viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h6"/></svg></button>
+    <span class="tool-sep"></span>
+    <button class="tool" id="toolCheck" title="Şimdi kontrol et"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    <button class="tool" id="toolFolder" title="İndirme klasörünü aç"><svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
+    <span class="grow"></span>
+    <button class="tool" id="toolPrefs" title="Tercihler"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+  </aside>
+
+  <!-- Calisma alani -->
+  <main class="workspace">
+    <div class="doc-tabs">
+      <button class="doc-tab active" data-view="plan">Sıradaki yerleşim <span class="muted" id="rollInfo"></span></button>
+      <button class="doc-tab" data-view="sheets">Hazır sayfalar <span class="badge" id="sheetsCount">0</span></button>
+    </div>
+    <div class="pasteboard scroll">
+      <section class="view" id="view-plan">
+        <div class="artboards" id="plan"></div>
         <div class="waiting hidden" id="waitingBox">
           <div class="waiting-head">
-            <div><b id="waitingTitle">Bekleyen</b><div class="muted small">Tam satır oluşturmadığı için sonraki siparişlerin yanına dizilecek.</div></div>
-            <label class="switch"><input type="checkbox" id="forceAll" /><span>Bekleyenleri de diz</span></label>
+            <b id="waitingTitle">Bekleyen</b>
+            <span class="muted small">Tam satır oluşturmadığı için sonraki siparişlerin yanına dizilecek. Hemen basmak için üstteki “Bekleyenleri de diz” kutusunu işaretleyin.</span>
           </div>
           <div class="waiting-list" id="waitingList"></div>
         </div>
-
-        <div class="sub-head">
-          <span>Hazır sayfalar</span>
-          <button class="btn print small" id="btnPrintAll" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Basılmamışları bas</span></button>
-        </div>
+      </section>
+      <section class="view hidden" id="view-sheets">
         <div class="sheet-grid" id="sheets"></div>
-      </div>
-    </section>
+      </section>
+    </div>
   </main>
 
-  <footer class="activity" id="activity">
+  <!-- Panel yuvasi -->
+  <aside class="dock">
+    <div class="panel">
+      <div class="panel-tabs"><span class="ptab active">Siparişler</span><span class="grow"></span><span class="chip unprinted">Basılmadı</span><span class="chip printed">Basıldı</span></div>
+      <div class="panel-sub muted" id="ordersSummary">—</div>
+      <div class="panel-body scroll" id="orders"></div>
+    </div>
+  </aside>
+
+  <!-- Durum cubugu -->
+  <footer class="statusbar activity" id="activity">
     <button class="activity-toggle" id="actToggle"><span class="dot"></span><span id="lastLog">Etkinlik</span><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
     <div class="activity-list" id="logList"></div>
   </footer>
 
-  <!-- İşlem katmanı -->
+  <!-- Islem penceresi -->
   <div class="overlay hidden" id="jobOverlay">
-    <div class="job-card">
-      <div class="spinner"></div>
-      <h3 id="jobTitle">Photoshop çalışıyor</h3>
-      <p class="muted" id="jobLabel">—</p>
-      <div class="bar"><div class="bar-fill" id="jobBar"></div></div>
-      <p class="muted small">İşlem bitene kadar Photoshop'ta başka bir şey yapmayın.</p>
+    <div class="dialog job-card">
+      <div class="dialog-title" id="jobTitle">Photoshop çalışıyor</div>
+      <div class="dialog-body">
+        <p id="jobLabel">—</p>
+        <div class="bar"><div class="bar-fill" id="jobBar"></div></div>
+        <p class="muted small">İşlem bitene kadar Photoshop'ta başka bir şey yapmayın.</p>
+      </div>
     </div>
   </div>
 
-  <!-- Ayarlar -->
+  <!-- Tercihler -->
   <div class="drawer-bg hidden" id="drawerBg"></div>
-  <aside class="drawer" id="drawer">
-    <div class="drawer-head"><h2>Ayarlar</h2><button class="icon-btn" id="btnCloseSettings"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <form class="drawer-body scroll" id="settingsForm">
-      <h4>Uygulama</h4>
+  <aside class="drawer dialog" id="drawer">
+    <div class="dialog-title"><span>Tercihler</span><button class="icon-btn" id="btnCloseSettings" title="Kapat"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="pref">
+      <nav class="pref-nav">
+        <a data-goto="set-app" class="active">Uygulama</a>
+        <a data-goto="set-shop">Shopify</a>
+        <a data-goto="set-card">Teşekkür kartı</a>
+        <a data-goto="set-dirs">Klasörler</a>
+        <a data-goto="set-print">Baskı</a>
+        <a data-goto="set-reset">Sıfırlama</a>
+      </nav>
+<form class="pref-body scroll" id="settingsForm">
+      <h4 id="set-app">Uygulama</h4>
       <div class="update-box" id="updBox">
         <div class="update-row">
           <div><b>Tuhalf Print</b> <span class="muted" id="updCurrent">v—</span><div class="muted small" id="updText">—</div></div>
@@ -96,7 +123,7 @@
           <button type="button" class="btn primary small hidden" id="btnUpdInstall">Yeniden başlat ve güncelle</button>
         </div>
       </div>
-      <h4>Shopify</h4>
+      <h4 id="set-shop">Shopify</h4>
       <label>Mağaza adresi<input name="shop" placeholder="xxxx.myshopify.com" /></label>
       <label>Client ID<input name="clientId" /></label>
       <label>Client Secret<input name="clientSecret" type="password" /></label>
@@ -104,7 +131,7 @@
         <label>İlk sipariş no<input name="firstOrderNo" type="number" /></label>
         <label>Kontrol sıklığı (dk)<input name="intervalMin" type="number" min="5" /></label>
       </div>
-      <h4>Teşekkür kartı</h4>
+      <h4 id="set-card">Teşekkür kartı</h4>
       <div class="card-box">
         <div class="card-thumb" id="cardThumb"></div>
         <div class="card-info">
@@ -119,21 +146,30 @@
       </div>
       <label>Sayfa başına en fazla kart<input name="card.maxPerSheet" type="number" min="0" /><small>0 = sınırsız. Kart, sayfadaki boş kalan her yere yerleşir.</small></label>
       <label class="check"><input type="checkbox" name="card.enabled" /> Boşluklara teşekkür kartı yerleştir</label>
-      <h4>Klasörler</h4>
+      <h4 id="set-dirs">Klasörler</h4>
       <label>İndirme klasörü<div class="pick"><input name="downloadDir" /><button type="button" class="btn ghost small" data-pick="folder" data-target="downloadDir">Seç</button></div></label>
       <label>Mesai bitişi<input name="dayEnd" placeholder="18:00" /><small>Bu saatten sonra inen dosyalar ertesi günün klasörüne yazılır.</small></label>
-      <h4>Baskı</h4>
+      <h4 id="set-print">Baskı</h4>
       <div class="row2">
         <label>Sayfa genişliği (mm)<input name="print.rollWidthMm" type="number" step="0.01" /></label>
         <label>Sayfa boyu (mm)<input name="print.maxLengthMm" type="number" step="0.01" /></label>
         <label>Kenar boşluğu (mm)<input name="print.marginMm" type="number" step="0.1" /></label>
-        <label>Tasarımlar arası (mm)<input name="print.gapMm" type="number" step="0.1" /></label>
+        <label>Tasarımlar arası (mm)<input name="print.gapMm" type="number" step="0.1" min="1" /></label>
       </div>
       <label>Hiç döndürülmeyecek ebatlar<input name="print.portraitLocked" placeholder="Boş: tüm ebatlar gerekirse 90° döner" /></label>
       <label>Photoshop<div class="pick"><input name="photoshopPath" placeholder="Otomatik bulunur" /><button type="button" class="btn ghost small" data-pick="file" data-target="photoshopPath">Seç</button></div><small id="psFound"></small></label>
       <label class="check"><input type="checkbox" name="openAtLogin" /> Bilgisayar açılınca otomatik başlat</label>
+          <h4 id="set-reset">Sıfırlama / yeniden indirme</h4>
+      <div class="reset-box">
+        <p class="muted small">Programı yeni bir bilgisayara kurduğunda ya da dosyalar silindiğinde, girdiğin sipariş numarası ve sonrasındaki tüm siparişlerin baskı dosyaları yeniden indirilir. Klasörde zaten olan dosyalar tekrar inmez, kopya oluşmaz.</p>
+        <div class="reset-row">
+          <label>Bu siparişten itibaren<input id="redoFrom" type="number" min="1" placeholder="ör. 2266" /></label>
+          <button type="button" class="btn" id="btnRedownload">Yeniden indir</button>
+        </div>
+      </div>
     </form>
-    <div class="drawer-foot"><button class="btn primary" id="btnSave">Kaydet</button></div>
+    </div>
+    <div class="drawer-foot"><button class="btn" id="btnCancel">İptal</button><button class="btn primary" id="btnSave">Tamam</button></div>
   </aside>
 
   <div class="toast hidden" id="toast"></div>

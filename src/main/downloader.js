@@ -80,6 +80,18 @@ async function downloadFile(url, dir, baseName) {
   throw lastErr;
 }
 
+// Ayni adli dosya (uzanti haric) son gun klasorlerinde ya da _Dizildi altinda var mi
+function existsAny(root, baseName) {
+  let days = [];
+  try { days = fs.readdirSync(root).filter((d) => /SIPARISLER$/i.test(d)).map((d) => path.join(root, d)); } catch { return false; }
+  for (const d of days) {
+    for (const dir of [d, path.join(d, '_Dizildi')]) {
+      try { if (fs.readdirSync(dir).some((f) => f.slice(0, f.length - path.extname(f).length) === baseName)) return true; } catch { /* */ }
+    }
+  }
+  return false;
+}
+
 /**
  * Yeni siparislerin baski dosyalarini indirir.
  * @param cfg  ayarlar
@@ -102,10 +114,18 @@ async function runDownload(cfg, done, log) {
   const outDir = path.join(cfg.downloadDir, folderName);
   const result = { checked: orders.length, files: [], pending: [], errors: [], folder: outDir, folderName };
 
+  // Yeniden indirme modu: bu numaradan itibaren daha once indirilmis siparisler de tekrar indirilir
+  const redo = Number(cfg.redownloadFrom) > 0 ? Number(cfg.redownloadFrom) : 0;
+  result.redo = redo;
+  orders.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   for (const o of orders) {
-    if (o.cancelledAt || done.has(o.id)) continue;
     const orderNo = parseInt(String(o.name).replace(/\D/g, ''), 10);
-    if (cfg.firstOrderNo > 0 && orderNo < cfg.firstOrderNo) continue;
+    if (o.cancelledAt) continue;
+    if (redo) { if (orderNo < redo) continue; }
+    else {
+      if (done.has(o.id)) continue;
+      if (cfg.firstOrderNo > 0 && orderNo < cfg.firstOrderNo) continue;
+    }
     const ageMin = (Date.now() - Date.parse(o.createdAt)) / 60000;
     if (ageMin < cfg.renderWaitMin) { result.pending.push(`#${orderNo} (render bekleniyor)`); continue; }
 
@@ -131,7 +151,10 @@ async function runDownload(cfg, done, log) {
       let i = 0;
       for (const it of items) {
         i++;
-        const file = await downloadFile(it.url, outDir, buildName(orderNo, it, i, items.length));
+        const baseName = buildName(orderNo, it, i, items.length);
+        // Yeniden indirmede ayni dosya zaten bu klasorde (veya _Dizildi'de) varsa kopya olusturma
+        if (redo && existsAny(cfg.downloadDir, baseName)) { result.skipped = (result.skipped || 0) + 1; continue; }
+        const file = await downloadFile(it.url, outDir, baseName);
         result.files.push(file);
         log('ok', `İndirildi: ${file}`);
       }
