@@ -235,7 +235,7 @@ function openDrawer(open) { $('#drawer').classList.toggle('open', open); $('#dra
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],[data-gsync],[data-gbuy],.order,.ord-file');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],[data-gsync],[data-gbuy],[data-glogin],.order,.ord-file');
   if (!t) return;
   if (t.dataset.import) return doImport();
   if (t.dataset.gsync) {
@@ -248,6 +248,7 @@ document.addEventListener('click', async (ev) => {
   if (t.dataset.prefs) { openDrawer(true); setTimeout(() => gotoPref('set-' + t.dataset.prefs), 150); return; }
   if (t.dataset.url) return window.api.openUrl(t.dataset.url);
   if (t.dataset.kprint) return printKargo([t.dataset.kprint]);
+  if (t.dataset.glogin) { ev.stopPropagation(); toast('Geliver penceresinde giriş yapın; bakiye görünce pencere kendiliğinden kapanır.'); await window.api.geliverLogin(); return; }
   if (t.dataset.gbuy) {
     const id = t.dataset.gbuy, label = t.textContent;
     t.disabled = true; t.textContent = 'Satın alınıyor…';
@@ -451,28 +452,25 @@ function offerStatus(r) {
   return `<span class="chip paid">Ödendi</span><div class="sub">${r.hepsijet ? 'Kargo satın alınabilir' : 'HepsiJet teklifi yok — Geliver\'de açın'}</div>`;
 }
 // Geliver bakiyesi: kartta goster, azalinca uyar
+// Geliver bakiyesi: Geliver kartinin icinde, sade bir satir; 500 TL ve altinda kirmizi + "Bakiye ekle"
 function renderBalance() {
-  const el = $('#gelBal'), bar = $('#gelBalBar');
-  const avg = KG && KG.avgCost || 167.19, lim = KG && KG.lowBalance || 500;
-  const show = KG && KTAB === 'geliver' && CFG && CFG.kargo && CFG.kargo.geliverToken;
-  bar.classList.toggle('hidden', !show);
-  if (!KG) return;
+  const el = $('#gelBal');
+  const card = document.querySelector('.carrier.gel');
+  if (!KG || !(CFG && CFG.kargo && CFG.kargo.geliverToken)) { el.innerHTML = ''; card.classList.remove('low'); return; }
+  const avg = KG.avgCost || 167.19, lim = KG.lowBalance || 500;
   if (KG.balance == null) {
-    el.textContent = KG.balanceError ? 'Bakiye okunamadı' : '';
-    if (show) { bar.className = 'bal-bar err'; bar.innerHTML = `<span class="bal-ico">₺</span><div class="bal-txt"><b>Geliver bakiyesi okunamadı</b><small>${esc(KG.balanceError || 'Bağlantı yok')}</small></div><button class="btn small" data-url="https://app.geliver.io/payment">Geliver'de gör</button>`; }
+    el.className = 'bal na'; card.classList.remove('low');
+    el.innerHTML = KG.balanceLogin
+      ? `<span class="bal-dot"></span>Bakiye için Geliver'e bir kez giriş yapın <span class="bal-link warn" data-glogin="1">Giriş yap</span>`
+      : `<span class="bal-dot"></span>Bakiye okunamadı <span class="bal-link" data-glogin="1" title="${esc(KG.balanceError || '')}">Geliver'e bağlan</span>`;
     return;
   }
-  const n = Math.floor(KG.balance / avg);
-  const low = KG.balance <= lim;
-  el.innerHTML = `Bakiye <b>${money(KG.balance)}</b> · ≈${n} kargo`;
-  el.classList.toggle('low', low);
-  if (!show) return;
-  bar.className = 'bal-bar' + (low ? ' low' : '');
-  bar.innerHTML = `<span class="bal-ico">₺</span>
-    <div class="bal-txt"><small>Geliver bakiyesi</small><b>${money(KG.balance)}</b></div>
-    <div class="bal-txt"><small>Bu bakiyeyle</small><b>≈ ${n} kargo</b></div>
-    <div class="bal-note">${low ? `⚠ <b>Bakiye ${money(lim)} ve altına düştü — bakiye ekleyin.</b> ` : ''}Ortalama HepsiJet kargo ${money(avg)} (KDV dahil). Güncellendi ${fmtTime(KG.at)}.</div>
-    <button class="btn small ${low ? 'primary' : 'ghost'}" data-url="https://app.geliver.io/payment">Bakiye ekle</button>`;
+  const n = Math.floor(KG.balance / avg), low = KG.balance <= lim;
+  card.classList.toggle('low', low);
+  el.className = 'bal' + (low ? ' low' : '');
+  el.title = `Ortalama HepsiJet kargo ${money(avg)} (KDV dahil) · güncellendi ${fmtTime(KG.at)}`;
+  el.innerHTML = `<span class="bal-dot"></span>Bakiye <b>${money(KG.balance)}</b><span class="bal-sep">·</span>≈${n} kargo`
+    + (low ? `<span class="bal-link warn" data-url="https://app.geliver.io/payment">⚠ Bakiye ekle</span>` : '');
 }
 function renderKargo() {
   if (!KG) return;

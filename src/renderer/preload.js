@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   kargo: (force) => ipcRenderer.invoke('kargo', force),
   printers: () => ipcRenderer.invoke('printers'),
   geliverSync: (id) => ipcRenderer.invoke('geliver-sync', id),
+  geliverLogin: () => ipcRenderer.invoke('geliver-login'),
   geliverBuy: (id) => ipcRenderer.invoke('geliver-buy', id),
   labelsOpen: (kind, ids) => ipcRenderer.invoke('labels-open', kind, ids),
   kargoDays: (d) => ipcRenderer.invoke('kargo-days', d),

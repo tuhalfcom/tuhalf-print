@@ -42,7 +42,7 @@ function mapShipment(s) {
   const cheapest = s.offers && s.offers.cheapest;
   const hj = preferredOffer(s);
   return {
-    id: s.id, no, gid: o.orderNumber || null, store: o.sourceIdentifier || '', createdAt: s.createdAt,
+    id: s.id, owner: s.owner || s.organizationID || null, no, gid: o.orderNumber || null, store: o.sourceIdentifier || '', createdAt: s.createdAt,
     name: a.name || '', city: a.cityName || a.city || '', district: a.districtName || a.district || '', address: [a.address1, a.address2].filter(Boolean).join(' '),
     phone: a.phone || '', status: s.statusCode || '', statusText: STATUS_TR[s.statusCode] || s.statusCode || '',
     provider: s.providerCode || (cheapest && cheapest.providerCode) || '', service: s.providerServiceCode || (cheapest && cheapest.providerServiceCode) || '',
@@ -68,14 +68,16 @@ function pickBalance(d) {
   return null;
 }
 // Geliver panelinin kullandigi yol: /organizations -> /organizations/{id}/balance; olmazsa /user/balance
-async function geliverBalance(token, fetchFn = fetch) {
+async function geliverBalance(token, fetchFn = fetch, orgId = null) {
   const H = { Authorization: 'Bearer ' + token };
   const notes = [];
-  let org = null;
-  try {
-    const j = await getJson(`${GELIVER_API}/organizations`, H, fetchFn);
-    org = Array.isArray(j.data) ? j.data[0] : j.data;
-  } catch (e) { notes.push('organizations: ' + e.message); }
+  let org = orgId ? { id: orgId } : null;
+  if (!org) {
+    try {
+      const j = await getJson(`${GELIVER_API}/organizations`, H, fetchFn);
+      org = Array.isArray(j.data) ? j.data[0] : j.data;
+    } catch (e) { notes.push('organizations: ' + e.message); }
+  }
   if (org && org.id) {
     try {
       const j = await getJson(`${GELIVER_API}/organizations/${encodeURIComponent(org.id)}/balance`, H, fetchFn);

@@ -376,3 +376,17 @@ select.days { height: 32px; padding: 0 8px; border: 1px solid var(--line-2); bor
 .btn.danger:hover:not(:disabled) { background: #f05a5f; }
 @keyframes askFade { from { opacity: 0; } }
 @keyframes askPop { from { transform: translateY(6px) scale(.98); opacity: 0; } }
+
+/* Geliver karti icinde sade bakiye satiri */
+.carrier .c-txt .bal { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; color: #c9ccd3; white-space: nowrap; }
+.carrier .c-txt .bal b { color: var(--text); font-weight: 700; }
+.carrier .c-txt .bal .bal-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok, #34c38f); }
+.carrier .c-txt .bal .bal-sep { color: var(--muted); }
+.carrier .c-txt .bal.na { color: var(--muted); }
+.carrier .c-txt .bal.na .bal-dot { background: #f0a33a; }
+.carrier .c-txt .bal.low, .carrier .c-txt .bal.low b { color: #ff9aa8; }
+.carrier .c-txt .bal.low .bal-dot { background: #f0566a; box-shadow: 0 0 0 3px rgba(240, 86, 106, .25); }
+.carrier .c-txt .bal .bal-link { margin-left: 6px; padding: 2px 8px; border-radius: 6px; border: 1px solid #3a3e46; color: var(--text); font-weight: 600; cursor: pointer; }
+.carrier .c-txt .bal .bal-link:hover { background: #30333b; }
+.carrier .c-txt .bal .bal-link.warn { border-color: #f0566a; background: rgba(240, 86, 106, .16); color: #ffb3bd; }
+.carrier.gel.low { border-color: #f0566a !important; box-shadow: 0 0 0 3px rgba(240, 86, 106, .14) !important; }

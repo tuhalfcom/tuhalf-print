@@ -410,17 +410,80 @@ const shopAdminOrder = (gid) => {
   const store = String(config.data.shop || '').replace(/\.myshopify\.com.*$/, '').replace(/^https?:\/\//, '');
   return id && store ? `https://admin.shopify.com/store/${store}/orders/${id}` : null;
 };
+// ---------- Geliver bakiyesi: Geliver panelinden (Ödemeler sayfasi) ----------
+// Geliver'in API anahtari bakiye okumaya izin vermiyor; panelde gorunen bakiyeyi programin kendi
+// Geliver oturumuyla (bir kez giris yapilir, hatirlanir) gizli pencerede okuruz.
+const GELIVER_PART = 'persist:geliver';
+let gelWeb = { at: 0, value: null, busy: null };
+function parseTL(t) {
+  let x = String(t).replace(/\s/g, '');
+  if (x.includes(',') && x.includes('.')) x = x.replace(/\./g, '').replace(',', '.');
+  else if (x.includes(',')) x = x.replace(',', '.');
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+const BAL_JS = `(() => { const t = document.body ? document.body.innerText : ''; const m = t.match(/Bakiye\s*\n?\s*(-?[\d.,]+)\s*₺/); return { url: location.href, m: m ? m[1] : null }; })()`;
+const isLoginUrl = (u) => /login|giris|signin|register|auth/i.test(new URL(u || 'https://x/').pathname);
+function geliverWebBalance(force) {
+  if (!force && gelWeb.value != null && Date.now() - gelWeb.at < 3 * 60000) return Promise.resolve(gelWeb.value);
+  if (gelWeb.busy) return gelWeb.busy;
+  gelWeb.busy = (async () => {
+    const w = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { partition: GELIVER_PART, sandbox: true } });
+    try {
+      w.loadURL('https://app.geliver.io/payment').catch(() => {});
+      for (let i = 0; i < 50; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        const r = await w.webContents.executeJavaScript(BAL_JS).catch(() => null);
+        if (r && r.m != null) { const n = parseTL(r.m); if (n != null) { gelWeb = { at: Date.now(), value: n, busy: null }; return n; } }
+        if (r && i > 3 && isLoginUrl(r.url)) { const e = new Error('Bakiyeyi görmek için programda bir kez Geliver\'e giriş yapın.'); e.login = true; throw e; }
+      }
+      throw new Error('Geliver ödeme sayfasında bakiye bulunamadı');
+    } finally { if (!w.isDestroyed()) w.destroy(); gelWeb.busy = null; }
+  })();
+  return gelWeb.busy;
+}
+// Geliver'e giris penceresi (oturum programda saklanir); giris yapilinca bakiye okunur ve pencere kapanir
+let gelLoginWin = null;
+ipcMain.handle('geliver-login', () => {
+  if (gelLoginWin && !gelLoginWin.isDestroyed()) { gelLoginWin.focus(); return true; }
+  gelLoginWin = new BrowserWindow({ width: 1100, height: 820, parent: win, title: 'Geliver\'e giriş — Tuhalf Print', icon: ICON, autoHideMenuBar: true, backgroundColor: '#ffffff', webPreferences: { partition: GELIVER_PART, sandbox: true } });
+  gelLoginWin.loadURL('https://app.geliver.io/payment').catch(() => {});
+  const timer = setInterval(async () => {
+    if (!gelLoginWin || gelLoginWin.isDestroyed()) return clearInterval(timer);
+    const r = await gelLoginWin.webContents.executeJavaScript(BAL_JS).catch(() => null);
+    if (r && r.m != null && !isLoginUrl(r.url)) {
+      clearInterval(timer);
+      const n = parseTL(r.m);
+      if (n != null) gelWeb = { at: Date.now(), value: n, busy: null };
+      log('ok', `Geliver oturumu açıldı; bakiye ${n != null ? n.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺' : 'okundu'}.`);
+      setTimeout(() => { if (gelLoginWin && !gelLoginWin.isDestroyed()) gelLoginWin.close(); }, 800);
+    }
+  }, 1500);
+  gelLoginWin.on('closed', () => { clearInterval(timer); gelLoginWin = null; kargoCache = null; send('kargo-updated'); });
+  return true;
+});
 let lastBalErr = 0;
+const GELIVER_ORG = '60cdea33-45e2-4715-a87f-7ecd3b57bc0d';   // tuhalf Geliver organizasyonu
 async function loadKargo(force) {
   if (!force && kargoCache && Date.now() - kargoCache.at < 60000) return kargoCache.data;
   const k = config.data.kargo || {};
   const printed = state.data.labelsPrinted || {};
   const pay = state.data.pay || {};
   const out = { cod: [], geliver: [], errors: [], codError: null, geliverError: null, codTest: false, at: Date.now() };
-  const [g, c, b] = await Promise.allSettled([K.geliverShipments(k.geliverToken, k.days || 14), K.codOrders(k, k.days || 14), k.geliverToken ? K.geliverBalance(k.geliverToken) : Promise.reject(new Error('-'))]);
-  out.balance = b.status === 'fulfilled' ? b.value : null;
-  out.balanceError = b.status === 'rejected' && k.geliverToken ? b.reason.message : null;
-  if (out.balanceError && (!lastBalErr || Date.now() - lastBalErr > 30 * 60000)) { lastBalErr = Date.now(); log('warn', 'Geliver bakiyesi okunamadı: ' + out.balanceError); }
+  const [g, c] = await Promise.allSettled([K.geliverShipments(k.geliverToken, k.days || 14), K.codOrders(k, k.days || 14)]);
+  // Bakiye: Geliver panelinin kullandigi organizasyon bakiyesi (organizasyon kimligi gonderilerden ya da ayardan)
+  const orgId = (g.status === 'fulfilled' && (g.value.find((x) => x.owner) || {}).owner) || k.geliverOrgId || GELIVER_ORG;
+  out.balance = null; out.balanceError = null; out.balanceLogin = false;
+  if (k.geliverToken) {
+    try { out.balance = await K.geliverBalance(k.geliverToken, fetch, orgId); }
+    catch (apiErr) {
+      // API anahtari bakiyeye izin vermiyor: Geliver panelinden (programin kendi Geliver oturumuyla) oku
+      try { out.balance = await geliverWebBalance(); }
+      catch (e) { out.balanceError = e.message; out.balanceLogin = !!e.login; }
+    }
+    out.balanceAt = Date.now();
+  }
+  if (out.balanceError && !out.balanceLogin && (!lastBalErr || Date.now() - lastBalErr > 30 * 60000)) { lastBalErr = Date.now(); log('warn', 'Geliver bakiyesi okunamadı: ' + out.balanceError); }
   out.avgCost = Number(k.avgCost) || 167.19;   // HepsiJet ortalama kargo (KDV dahil)
   out.lowBalance = Number(k.lowBalance) || 500;
   // Kapida odeme
@@ -626,7 +689,7 @@ ipcMain.handle('geliver-buy', async (_e, id) => {
     if (p.financial !== 'PAID') return { error: `${title}: Shopify'da ödeme “Ödendi” değil (${p.financial || 'bilinmiyor'}). Kargo satın alınmadı.` };
     const o = s.hepsijet;
     if (!o) return { error: `${title}: Geliver'de HepsiJet teklifi yok. Gönderiyi Geliver'de açıp teklif alın.` };
-    let bal = null; try { bal = await K.geliverBalance(k.geliverToken); } catch { /* */ }
+    let bal = null; try { bal = await K.geliverBalance(k.geliverToken); } catch { try { bal = await geliverWebBalance(true); } catch { /* */ } }
     if (bal != null && bal < o.total) return { error: `Geliver bakiyesi yetersiz: ${tl(bal)} (gereken ${tl(o.total)}). Bakiye ekleyin.` };
     const c = await ask({
       type: 'question', title: 'HepsiJet ile satın al', noLink: true, defaultId: 1, cancelId: 0, buttons: ['İptal', `Satın al · ${tl(o.total)}`],
@@ -635,7 +698,7 @@ ipcMain.handle('geliver-buy', async (_e, id) => {
     });
     if (c.response !== 1) return { canceled: true };
     const after = await K.geliverBuy(k.geliverToken, o.id);
-    kargoCache = null;
+    kargoCache = null; gelWeb.at = 0;
     log('ok', `${title} HepsiJet etiketi satın alındı (${tl(o.total)}).`);
     send('kargo-updated');
     return { ok: true, id: s.id, pdfUrl: after && after.pdfUrl, total: o.total };
