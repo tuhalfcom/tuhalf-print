@@ -170,7 +170,7 @@ function fillSettings(c) {
   }
 }
 function readSettings() {
-  const out = { print: {}, card: {} };
+  const out = { print: {}, card: {}, kargo: {} };
   for (const el of $('#settingsForm').elements) {
     if (!el.name) continue;
     let v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value.trim();
@@ -200,8 +200,11 @@ function openDrawer(open) { $('#drawer').classList.toggle('open', open); $('#dra
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],.order,.ord-file');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],.order,.ord-file');
   if (!t) return;
+  if (t.dataset.url) return window.api.openUrl(t.dataset.url);
+  if (t.dataset.kprint) return printKargo([t.dataset.kprint]);
+  if (t.dataset.kunmark) { await window.api.labelMark([t.dataset.kunmark], false); return loadKargo(false); }
   if (t.dataset.view) return setView(t.dataset.view);
   if (t.dataset.goto) return gotoPref(t.dataset.goto);
   if (t.dataset.scroll) { $('#orders').scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -240,6 +243,7 @@ function setView(v) {
   for (const el of document.querySelectorAll('.view')) el.classList.toggle('hidden', el.id !== 'view-' + v);
   for (const el of document.querySelectorAll('.tool[data-view], .doc-tab[data-view]')) el.classList.toggle('active', el.dataset.view === v);
   if (v === 'orders') loadOrdersPage(false, true);
+  if (v === 'kargo' || v === 'adres') loadKargo(false);
 }
 function setNewDots(n) {
   for (const el of document.querySelectorAll('.new-dot[title="Yeni sipariş"]')) el.classList.toggle('hidden', !n);
@@ -315,6 +319,141 @@ $('#ordFilter').onclick = (e) => {
   renderOrdersPage();
 };
 $('#btnOrdRefresh').onclick = () => loadOrdersPage(true, true);
+// ---------- Kargo fisleri ----------
+let KG = null, KTAB = 'cod', KFILTER = 'todo';
+const KSEL = new Set();
+const money = (n) => (n == null ? '—' : Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺');
+const fmtD = (t) => { if (!t) return '—'; const d = new Date(t); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
+function codRows() {
+  const rows = (KG.cod || []).filter((o) => o.gonderim !== 'FULFILLED' || KFILTER === 'all');
+  if (KFILTER === 'todo') return rows.filter((o) => !o.sorun && !o.printedAt);
+  if (KFILTER === 'offer') return [];
+  return rows;
+}
+function gelRows() {
+  const rows = KG.geliver || [];
+  if (KFILTER === 'todo') return rows.filter((s) => s.kind === 'ready' && !s.printedAt && s.status !== 'LABEL_PRINTED');
+  if (KFILTER === 'offer') return rows.filter((s) => s.kind === 'offer');
+  return rows;
+}
+function setCounts() {
+  const todoCod = (KG.cod || []).filter((o) => o.gonderim !== 'FULFILLED' && !o.sorun && !o.printedAt).length;
+  const todoGel = (KG.geliver || []).filter((s) => s.kind === 'ready' && !s.printedAt && s.status !== 'LABEL_PRINTED').length;
+  $('#kcCod').textContent = todoCod; $('#kcGel').textContent = todoGel;
+  const errs = (KG.errors || []).length;
+  for (const el of document.querySelectorAll('[data-count="labels"]')) { el.textContent = todoCod + todoGel; el.classList.toggle('hidden', !(todoCod + todoGel)); }
+  for (const el of document.querySelectorAll('[data-count="errors"]')) { el.textContent = errs; el.classList.toggle('hidden', !errs); }
+}
+function renderKargo() {
+  if (!KG) return;
+  setCounts();
+  const notes = [];
+  if (KTAB === 'cod' && KG.codError) notes.push('Kapıda ödeme: ' + KG.codError);
+  if (KTAB === 'geliver' && KG.geliverError) notes.push('Geliver: ' + KG.geliverError);
+  if (KTAB === 'cod' && KG.codTest) notes.push('Etiket sunucusu DENEME modunda: fişler “ÖRNEK” yazılı çıkar, DHL\'e kaydedilmez.');
+  $('#kargoNote').classList.toggle('hidden', !notes.length); $('#kargoNote').textContent = notes.join(' · ');
+  $('#kargoFilter').querySelector('[data-f=offer]').classList.toggle('hidden', KTAB === 'cod');
+  if (KTAB === 'cod' && KFILTER === 'offer') KFILTER = 'todo';
+  for (const b of $('#kargoFilter').children) b.classList.toggle('active', b.dataset.f === KFILTER);
+  const rows = KTAB === 'cod' ? codRows() : gelRows();
+  const keyOf = (r) => (KTAB === 'cod' ? r.id : r.id);
+  for (const k of [...KSEL]) if (!rows.some((r) => keyOf(r) === k)) KSEL.delete(k);
+  const selectable = (r) => (KTAB === 'cod' ? !r.sorun && r.gonderim !== 'FULFILLED' : r.kind === 'ready');
+  const all = rows.filter(selectable);
+  $('#kargoHead').innerHTML = `<tr><th class="cb"><input type="checkbox" id="kAll" ${all.length && all.every((r) => KSEL.has(keyOf(r))) ? 'checked' : ''}></th><th>Sipariş</th><th>Tarih</th><th>Alıcı</th><th>Adres</th>${KTAB === 'cod' ? '<th class="num">Tahsilat</th>' : '<th>Kargo</th>'}<th>Durum</th><th></th></tr>`;
+  $('#kargoRows').innerHTML = rows.map((r) => {
+    const k = keyOf(r), can = selectable(r);
+    let st, act = '';
+    if (KTAB === 'cod') {
+      st = r.sorun ? `<span class="chip err">Adres hatası</span><div class="sub">${esc(r.sorun)}</div>`
+        : r.printedAt ? `<span class="chip printed">Basıldı ${fmtTime(r.printedAt)}</span>`
+        : r.etiketli ? '<span class="chip ready">DHL\'e kayıtlı</span><div class="sub">Tekrar basılabilir</div>'
+        : r.gonderim === 'FULFILLED' ? '<span class="chip pending">Gönderildi</span>' : '<span class="chip unprinted">Basılmadı</span>';
+      if (can) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt ? 'Tekrar bas' : 'Bas'}</button>`;
+      if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="cod:${esc(r.no)}" title="Basılmadı olarak işaretle">↺</button>`;
+      if (r.admin) act += `<button class="btn ghost small" data-url="${esc(r.admin)}">Shopify</button>`;
+    } else {
+      const ready = r.kind === 'ready';
+      st = r.printedAt ? `<span class="chip printed">Basıldı ${fmtTime(r.printedAt)}</span>`
+        : ready ? `<span class="chip unprinted">Basılmadı</span><div class="sub">${esc(r.statusText)}</div>`
+        : r.kind === 'offer' ? `<span class="chip cod">${esc(r.statusText)}</span><div class="sub">Geliver'de teklif kabul edilmeli</div>`
+        : `<span class="chip pending">${esc(r.statusText)}</span>`;
+      if (ready) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt ? 'Tekrar bas' : 'Bas'}</button>`;
+      if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="geliver:${esc(r.id)}" title="Basılmadı olarak işaretle">↺</button>`;
+      if (r.kind === 'offer') act += `<button class="btn ghost small" data-url="https://app.geliver.io/shipments?statusFilter=GOT_OFFERS">Geliver'de aç</button>`;
+      if (r.trackingUrl) act += `<button class="btn ghost small" data-url="${esc(r.trackingUrl)}">Takip</button>`;
+    }
+    const ship = KTAB === 'cod' ? `<td class="num">${money(r.tutar)}</td>` : `<td>${esc(r.provider || '—')}${r.price != null ? `<div class="sub">${money(r.price)}${r.desi != null ? ' · ' + r.desi + ' desi' : ''}</div>` : ''}</td>`;
+    const place = KTAB === 'cod' ? [r.ilce, r.il].filter(Boolean).join(' / ') || r.sehir : [r.district, r.city].filter(Boolean).join(' / ');
+    return `<tr class="${KSEL.has(k) ? 'sel' : ''}">
+      <td class="cb">${can ? `<input type="checkbox" data-ksel="${esc(k)}" ${KSEL.has(k) ? 'checked' : ''}>` : ''}</td>
+      <td class="no">#${esc(r.no || '?')}</td><td>${fmtD(KTAB === 'cod' ? r.tarih : r.createdAt)}</td>
+      <td>${esc(KTAB === 'cod' ? r.ad : r.name) || '—'}</td>
+      <td class="addr">${esc(r.adres || r.address || '')}${place ? `<div class="sub">${esc(place)}</div>` : ''}</td>
+      ${ship}<td>${st}</td><td><div class="act">${act}</div></td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="muted">${KFILTER === 'todo' ? 'Basılacak kargo fişi yok.' : 'Gösterilecek gönderi yok.'}</td></tr>`;
+  $('#btnKargoPrint').disabled = !KSEL.size;
+  $('#btnKargoPrint').lastChild.textContent = KSEL.size ? `Seçilenleri bas (${KSEL.size})` : 'Seçilenleri bas';
+  $('#kargoInfo').textContent = KG.at ? `Güncellendi ${fmtTime(KG.at)}` : '';
+  renderAdres();
+}
+function renderAdres() {
+  const rows = KG.errors || [];
+  $('#adresRows').innerHTML = rows.map((e) => `<tr>
+    <td class="no">#${esc(e.no || '?')}</td>
+    <td>${e.source === 'cod' ? '<span class="chip cod">Kapıda ödeme · DHL</span>' : '<span class="chip ship">Geliver</span>'}</td>
+    <td>${esc(e.name || '—')}</td>
+    <td class="addr">${esc(e.address || '')}${e.city ? `<div class="sub">${esc(e.city)}</div>` : ''}</td>
+    <td><span class="chip err">Adres hatası</span><div class="sub">${esc(e.error)}</div></td>
+    <td><div class="act">${e.link ? `<button class="btn small" data-url="${esc(e.link)}">Shopify'da düzelt</button>` : ''}${e.geliver ? `<button class="btn ghost small" data-url="https://app.geliver.io/shipments">Geliver</button>` : ''}</div></td>
+  </tr>`).join('') || `<tr><td colspan="6" class="muted">${KG.codError && KG.geliverError ? 'Kargo bilgileri alınamadı: ' + esc(KG.codError) : 'Adres hatası olan sipariş yok.'}</td></tr>`;
+}
+async function loadKargo(force) {
+  const r = await window.api.kargo(force);
+  if (r.error) { toast(r.error, true); return; }
+  KG = r; renderKargo();
+}
+$('#kargoTabs').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; KTAB = b.dataset.k; KSEL.clear(); for (const x of $('#kargoTabs').children) x.classList.toggle('active', x === b); renderKargo(); };
+$('#kargoFilter').onclick = (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; KFILTER = b.dataset.f; KSEL.clear(); renderKargo(); };
+$('#btnKargoRefresh').onclick = $('#btnAdresRefresh').onclick = () => loadKargo(true);
+$('#kargoRows').onchange = $('#kargoHead').onchange = (e) => {
+  if (e.target.id === 'kAll') {
+    const rows = (KTAB === 'cod' ? codRows() : gelRows()).filter((r) => (KTAB === 'cod' ? !r.sorun && r.gonderim !== 'FULFILLED' : r.kind === 'ready'));
+    for (const r of rows) e.target.checked ? KSEL.add(r.id) : KSEL.delete(r.id);
+  } else if (e.target.dataset.ksel) { e.target.checked ? KSEL.add(e.target.dataset.ksel) : KSEL.delete(e.target.dataset.ksel); }
+  renderKargo();
+};
+async function printKargo(ids) {
+  if (!ids.length) return;
+  const b = $('#btnKargoPrint'); b.disabled = true;
+  try {
+    const r = KTAB === 'cod' ? await window.api.printCod(ids) : await window.api.printGeliver(ids);
+    if (r.error) toast(r.error, true);
+    else {
+      const errs = (r.errors || []).length + (r.failed || []).length;
+      toast(`${r.printed} kargo fişi yazıcıya gönderildi` + (errs ? ` · ${errs} sipariş basılamadı (Adres hataları / Etkinlik)` : '') + (r.test ? ' · DENEME modu' : ''), !!errs && !r.printed);
+    }
+    KSEL.clear();
+    await loadKargo(KTAB === 'cod');
+  } finally { b.disabled = !KSEL.size; }
+}
+$('#btnKargoPrint').onclick = () => printKargo([...KSEL]);
+window.api.on('kargo-updated', () => { if (VIEW === 'kargo' || VIEW === 'adres') loadKargo(false); else window.api.kargo(false).then((r) => { if (!r.error) { KG = r; setCounts(); } }); });
+async function loadPrinters() {
+  const list = await window.api.printers();
+  const sel = $('#printerSelect'), cur = (CFG && CFG.kargo && CFG.kargo.printer) || '';
+  sel.innerHTML = '<option value="">Varsayılan yazıcı</option>' + list.map((p) => `<option value="${esc(p.name)}">${esc(p.label)}${p.isDefault ? ' (varsayılan)' : ''}</option>`).join('');
+  if (cur && !list.some((p) => p.name === cur)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(cur)}">${esc(cur)} (bulunamadı)</option>`);
+  sel.value = cur;
+}
+$('#btnExport').onclick = async () => { const r = await window.api.settingsExport(); if (r && r.ok) toast('Ayarlar kaydedildi: ' + r.file); };
+$('#btnImport').onclick = async () => {
+  const r = await window.api.settingsImport();
+  if (!r || r.canceled) return;
+  if (r.error) return toast(r.error, true);
+  CFG = r.config; fillSettings(CFG); loadPrinters(); toast('Ayarlar içe aktarıldı'); KG = null; loadKargo(true);
+};
+
 $('#btnResetFiles').onclick = async () => {
   const r = await window.api.resetFiles();
   if (r.error) return toast(r.error, true);
@@ -358,6 +497,7 @@ $('#btnCloseSettings').onclick = $('#drawerBg').onclick = () => openDrawer(false
 $('#btnSave').onclick = async () => {
   const r = await window.api.saveConfig(readSettings());
   CFG = r.config; fillSettings(CFG); setPsFound(r.photoshop); renderCard(); openDrawer(false); toast('Ayarlar kaydedildi');
+  if (CFG.kargo && (CFG.kargo.geliverToken || CFG.kargo.codKey)) window.api.kargo(true).then((x) => { if (!x.error) { KG = x; setCounts(); if (VIEW === 'kargo' || VIEW === 'adres') renderKargo(); } });
 };
 $('#actToggle').onclick = () => $('#activity').classList.toggle('open');
 
@@ -415,7 +555,8 @@ window.api.on('refresh', refreshAll);
   document.body.classList.toggle('mac', d.status.platform === 'darwin');
   document.body.classList.toggle('win', d.status.platform === 'win32');
   $('#ver').textContent = `v${d.status.version}`;
-  fillSettings(CFG); setPsFound(d.photoshop); renderCard();
+  fillSettings(CFG); setPsFound(d.photoshop); renderCard(); loadPrinters();
+  if (CFG.kargo && (CFG.kargo.geliverToken || CFG.kargo.codKey)) window.api.kargo(false).then((r) => { if (!r.error) { KG = r; setCounts(); } });
   UPD = d.update || {}; renderUpdate();
   d.logs.forEach(addLog);
   renderStatus();

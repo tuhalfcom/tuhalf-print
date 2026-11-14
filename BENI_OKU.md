@@ -25,13 +25,19 @@ Shopify siparişlerinin baskı dosyalarını indirir, rulo sayfalara dizer, Phot
 - **Siparişler sayfası** (üst menü > Siparişler): son 14 günün siparişleri; müşteri, şehir, ödeme durumu (kapıda ödeme / havale), kargo yöntemi ve durumu, tutar, baskı dosyaları ve baskı durumu. Arama ve filtre var. Müşteri adı için Shopify uygulamasında “korunan müşteri verisi” izni gerekir; izin yoksa o sütun boş kalır.
 - Yeni sipariş inince **Siparişler** menüsünde ve panelde yeşil nokta yanar; Siparişler sayfası açılınca söner.
 - **Dosyaları resetle** (Tercihler > Sıfırlama): programın oluşturduğu sipariş klasörlerini (indirilenler, _Dizildi, _Sayfalar) onay sorduktan sonra **kalıcı olarak siler**, indirme ve baskı geçmişini sıfırlar. Sonrasında eski siparişler otomatik inmez; **Yeniden indir** ile istenen siparişten itibaren temiz başlanır.
+- **Kargo fişleri** (üst menü > Kargo fişleri): iki sekme.
+  - **Kapıda ödeme (DHL):** Kapıda ödeme siparişleri, tuhalf etiket sunucusundan (Cloudflare `tuhalf-etiket`) gelir. **Bas** dediğinde sunucu siparişi DHL'e kaydeder ve 100×100 fişi verir; fiş etiket yazıcısına basılır. Bu, Shopify yöneticisindeki “DHL Kapıda Ödeme Etiketi” ile aynı iştir.
+  - **Geliver:** Geliver'de etiketi alınmış (kod alınmış) gönderilerin fişleri buradan basılır. “Teklif alındı” durumundakiler için önce Geliver'de teklif kabul edilmelidir. Kapıda ödeme siparişleri Geliver listesinde gösterilmez.
+  - Basılanlar “Basıldı” olur, ↺ ile geri alınır. Fişler Tercihler > Kargo fişleri'nde seçilen yazıcıya 100×100 mm, kenar boşluksuz basılır.
+- **Adres hataları** (üst menü > Adres hataları): kargo fişi alınamayan siparişler (DHL: il/ilçe bulunamadı, telefon geçersiz; Geliver: gönderi hatası, eksik il/ilçe) ayrı ekranda durur. **Shopify'da düzelt** siparişi açar; düzeltilince listeden kendiliğinden düşer.
+- **Ayar dosyası** (Tercihler > Kargo fişleri): bir bilgisayarda “Dışa aktar”, diğerlerinde “İçe aktar” ile tüm bilgisayarlar aynı ayarlarla kurulur. Dosyada anahtarlar var; paylaşmayın, iş bitince silin.
 - **Yeni bilgisayara kurulum / sıfırlama:** Tercihler > Sıfırlama'da sipariş numarasını girip **Yeniden indir** de. O sipariş ve sonrasındaki baskı dosyaları tekrar iner (son 120 gün). Klasörde zaten olan dosyalar tekrar inmez.
 - Klasörler: `Masaüstü\BASKI\GG-AA-YY-SIPARISLER\`: `_Dizildi` (dizilen kaynaklar), `_Sayfalar` (PSD sayfalar).
 
 ## Derleme (geliştirici)
 ```
 npm install
-npm test            # 29 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
+npm test            # 36 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
 npm start           # geliştirme modunda aç
 npm run dist:win    # dist/Tuhalf-Print-Kurulum-1.1.0.exe
 npm run dist:mac    # dist/Tuhalf-Print-1.1.0-mac.dmg (Mac'te)

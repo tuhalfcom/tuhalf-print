@@ -11,6 +11,7 @@ const { packAll } = require('./packer');
 const PS = require('./photoshop');
 const { createUpdater } = require('./updater');
 const { parseName } = require('./naming');
+const K = require('./kargo');
 
 const ROOT = path.join(__dirname, '..', '..');
 const ICON = path.join(ROOT, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
@@ -34,6 +35,7 @@ function defaults() {
     colorWords: ['Siyah', 'Beyaz', 'Ahsap', 'Naturel', 'Ceviz', 'Gold', 'Altin', 'Gumus', 'Silver', 'Mese'],
     print: { rollWidthMm: 609.6, maxLengthMm: 720.01, marginMm: 3, gapMm: 1, dpi: 300, portraitLocked: [] },
     card: { enabled: true, file: '', wMm: 0, hMm: 0, maxPerSheet: 0 },
+    kargo: { geliverToken: '', codUrl: 'https://tuhalf-etiket.tuhalfcom.workers.dev', codKey: '', printer: '', days: 14 },
     photoshopPath: '', schema: 3,
   };
 }
@@ -140,6 +142,8 @@ async function checkNow(opts = {}) {
     if (r.files.length) notify('Tuhalf Print', `${r.files.length} yeni baskı dosyası indi`);
     detailCache = null;
     send('refresh');   // odeme durumu degismis olabilir: yeni dosya olmasa da ekranlari yenile
+    const kk = config.data.kargo || {};
+    if (kk.geliverToken || kk.codKey) loadKargo(true).then(() => send('kargo-updated')).catch(() => {});
     return r;
   } catch (e) {
     status.lastError = e.message; log('error', e.message);
@@ -286,7 +290,14 @@ function thumb(file) {
 }
 
 // ---------------- IPC ----------------
-function safeConfig() { const c = { ...config.data }; c.clientSecret = c.clientSecret ? '••••••••' : ''; return c; }
+const MASK = '••••••••';
+function safeConfig() {
+  const c = { ...config.data, kargo: { ...(config.data.kargo || {}) } };
+  c.clientSecret = c.clientSecret ? MASK : '';
+  c.kargo.geliverToken = c.kargo.geliverToken ? MASK : '';
+  c.kargo.codKey = c.kargo.codKey ? MASK : '';
+  return c;
+}
 
 ipcMain.handle('init', () => ({ config: safeConfig(), status: publicStatus(), logs, photoshop: PS.findPhotoshop(config.data.photoshopPath), update: updater.status() }));
 ipcMain.handle('update-check', () => updater.check(true));
@@ -363,6 +374,141 @@ ipcMain.handle('orders-detail', async (_e, force) => {
   for (const [no, l] of local) if (!rows.has(no)) rows.set(no, { no, hold: holdOf(no), name: '', createdAt: null, financial: '', fulfillment: '', gateways: [], shipping: '', total: null, currency: '', items: [], local: l, onlyLocal: true });
   const list = Array.from(rows.values()).sort((a, b) => b.no - a.no);
   return { rows: list, error, pii, fetchedAt: detailCache ? detailCache.at : null };
+});
+
+// ---------- Kargo fisleri ----------
+let kargoCache = null; // { at, data }
+const shopAdminOrder = (gid) => {
+  const id = String(gid || '').replace(/\D/g, '');
+  const store = String(config.data.shop || '').replace(/\.myshopify\.com.*$/, '').replace(/^https?:\/\//, '');
+  return id && store ? `https://admin.shopify.com/store/${store}/orders/${id}` : null;
+};
+async function loadKargo(force) {
+  if (!force && kargoCache && Date.now() - kargoCache.at < 60000) return kargoCache.data;
+  const k = config.data.kargo || {};
+  const printed = state.data.labelsPrinted || {};
+  const pay = state.data.pay || {};
+  const out = { cod: [], geliver: [], errors: [], codError: null, geliverError: null, codTest: false, at: Date.now() };
+  const [g, c] = await Promise.allSettled([K.geliverShipments(k.geliverToken, k.days || 14), K.codOrders(k, k.days || 14)]);
+  // Kapida odeme
+  const codNos = new Set();
+  if (c.status === 'fulfilled') {
+    out.codTest = c.value.test;
+    for (const o of c.value.orders) {
+      codNos.add(Number(o.no));
+      const row = { ...o, printedAt: printed['cod:' + o.no] || null, admin: shopAdminOrder(o.id) };
+      out.cod.push(row);
+      if (o.sorun && !o.etiketli) out.errors.push({ source: 'cod', no: o.no, name: o.ad, address: o.adres, city: [o.sehir, o.il].filter(Boolean).join(' / '), error: o.sorun, link: row.admin, at: o.tarih });
+    }
+  } else out.codError = c.reason.message;
+  // Geliver (kapida odeme siparisleri DHL'e gider, burada gosterilmez)
+  if (g.status === 'fulfilled') {
+    for (const s of g.value) {
+      const p = s.no ? pay[s.no] : null;
+      const cod = codNos.has(s.no) || (p && (p.gateways || []).concat(p.shipping || '').some((x) => /cash on delivery|\bcod\b|kap[ıi]da/i.test(x))) || /KAPIDA/i.test(s.service || '');
+      if (cod) continue;
+      const row = { ...s, kind: K.geliverKind(s), printedAt: printed['geliver:' + s.id] || null, admin: shopAdminOrder(s.gid) };
+      out.geliver.push(row);
+      const err = K.geliverAddressError(s);
+      if (err && row.kind !== 'done') out.errors.push({ source: 'geliver', no: s.no, name: s.name, address: s.address, city: [s.district, s.city].filter(Boolean).join(' / '), error: err, link: row.admin, geliver: true, at: s.createdAt });
+    }
+  } else out.geliverError = g.reason.message;
+  out.errors.sort((a, b) => (b.no || 0) - (a.no || 0));
+  kargoCache = { at: Date.now(), data: out };
+  return out;
+}
+
+// 100x100 etiketi secili yaziciya sessizce basar. src: { html } ya da { url }
+async function printLabel(src) {
+  const k = config.data.kargo || {};
+  const w = new BrowserWindow({ show: false, width: 420, height: 420, useContentSize: true, webPreferences: { sandbox: true, javascript: true } });
+  try {
+    if (src.html) {
+      const tmp = path.join(app.getPath('temp'), `tuhalf-etiket-${Date.now()}.html`);
+      fs.writeFileSync(tmp, src.html);
+      await w.loadFile(tmp);
+      setTimeout(() => fs.rm(tmp, () => {}), 60000);
+    } else await w.loadURL(src.url);
+    await w.webContents.executeJavaScript('document.fonts ? document.fonts.ready.then(() => true) : true').catch(() => true);
+    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((resolve, reject) => {
+      w.webContents.print({
+        silent: true, printBackground: true, deviceName: k.printer || undefined,
+        pageSize: { width: 100000, height: 100000 }, margins: { marginType: 'none' },
+      }, (ok, reason) => (ok ? resolve() : reject(new Error(reason || 'Yazdırılamadı'))));
+    });
+  } finally { if (!w.isDestroyed()) w.destroy(); }
+}
+function markLabels(keys) {
+  const printed = { ...(state.data.labelsPrinted || {}) };
+  const now = Date.now();
+  for (const k of keys) printed[k] = now;
+  for (const k of Object.keys(printed)) if (now - printed[k] > 90 * 864e5) delete printed[k];
+  state.data.labelsPrinted = printed; state.save();
+  if (kargoCache) for (const r of [...kargoCache.data.cod, ...kargoCache.data.geliver]) { const key = r.id && r.provider !== undefined ? 'geliver:' + r.id : 'cod:' + r.no; if (keys.includes(key)) r.printedAt = now; }
+}
+
+ipcMain.handle('kargo', async (_e, force) => {
+  try { return await loadKargo(force); } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('printers', async () => {
+  try { return (await win.webContents.getPrintersAsync()).map((p) => ({ name: p.name, label: p.displayName || p.name, isDefault: p.isDefault })); } catch { return []; }
+});
+// Geliver etiketleri: her gonderi ayri baski
+ipcMain.handle('print-geliver', async (_e, ids) => {
+  const data = await loadKargo(false);
+  const rows = data.geliver.filter((r) => ids.includes(r.id) && r.labelUrl);
+  const done = [], failed = [];
+  for (const r of rows) {
+    try { await printLabel({ url: r.labelUrl }); done.push(r.id); log('ok', `Geliver etiketi basıldı: #${r.no || '?'} ${r.name}`); }
+    catch (e) { failed.push(`#${r.no || '?'}: ${e.message}`); log('error', `Geliver etiketi basılamadı (#${r.no || '?'}): ${e.message}`); }
+  }
+  markLabels(done.map((id) => 'geliver:' + id));
+  return { printed: done.length, failed };
+});
+// Kapida odeme: sunucu DHL'e kaydeder, etiketleri tek baski isi olarak basar
+ipcMain.handle('print-cod', async (_e, ids) => {
+  const k = config.data.kargo || {};
+  try {
+    const r = await K.codLabels(k, ids);
+    if (r.html) await printLabel({ html: r.html });
+    markLabels((r.etiketler || []).map((no) => 'cod:' + no));
+    for (const no of r.etiketler || []) log('ok', `Kapıda ödeme etiketi basıldı: #${no}`);
+    for (const [n, m] of r.hatalar || []) log('warn', `${n} etiketi hazırlanamadı: ${m}`);
+    kargoCache = null;
+    return { printed: (r.etiketler || []).length, errors: r.hatalar || [], test: !!r.deneme };
+  } catch (e) { log('error', 'Kapıda ödeme etiketleri alınamadı: ' + e.message); return { error: e.message }; }
+});
+ipcMain.handle('label-mark', (_e, keys, on) => {
+  if (on) markLabels(keys);
+  else { const p = { ...(state.data.labelsPrinted || {}) }; for (const k of keys) delete p[k]; state.data.labelsPrinted = p; state.save(); kargoCache = null; }
+  return true;
+});
+ipcMain.handle('open-url', (_e, u) => { if (/^https:\/\//.test(String(u))) shell.openExternal(u); return true; });
+
+// Ayarlari disa/ice aktar (ofisteki diger bilgisayarlar icin; gizli anahtarlar dahil)
+ipcMain.handle('settings-export', async () => {
+  const r = await dialog.showSaveDialog(win, { title: 'Ayarları dışa aktar', defaultPath: path.join(app.getPath('documents'), 'tuhalf-print-ayarlar.json'), filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (r.canceled) return { canceled: true };
+  const { photoshopPath, downloadDir: _d, card, ...rest } = config.data;
+  fs.writeFileSync(r.filePath, JSON.stringify({ tuhalfPrintAyarlari: 1, ...rest }, null, 2));
+  log('ok', 'Ayarlar dışa aktarıldı: ' + r.filePath);
+  return { ok: true, file: r.filePath };
+});
+ipcMain.handle('settings-import', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Ayarları içe aktar', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (r.canceled) return { canceled: true };
+  let j;
+  try { j = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8')); } catch (e) { return { error: 'Dosya okunamadı: ' + e.message }; }
+  if (!j || !j.tuhalfPrintAyarlari) return { error: 'Bu bir Tuhalf Print ayar dosyası değil.' };
+  const allowed = ['shop', 'clientId', 'clientSecret', 'apiVersion', 'firstOrderNo', 'intervalMin', 'lookbackDays', 'dayEnd', 'print', 'kargo'];
+  const patch = {};
+  for (const key of allowed) if (j[key] !== undefined) patch[key] = j[key];
+  if (patch.kargo) { const cur = config.data.kargo || {}; patch.kargo = { ...cur, ...patch.kargo, printer: cur.printer || patch.kargo.printer || '' }; }
+  config.set(patch); kargoCache = null;
+  log('ok', 'Ayarlar içe aktarıldı: ' + Object.keys(patch).join(', '));
+  schedule(); pushStatus(); send('refresh');
+  return { ok: true, config: safeConfig() };
 });
 
 // ---------- Sifirlama: programin olusturdugu klasor ve dosyalari kalici sil ----------
@@ -443,7 +589,8 @@ ipcMain.handle('card-thumb', () => { const c = config.data.card; return c && c.f
 ipcMain.handle('open-path', (_e, p) => shell.openPath(p));
 ipcMain.handle('show-item', (_e, p) => shell.showItemInFolder(p));
 ipcMain.handle('save-config', (_e, patch) => {
-  if (patch.clientSecret === '••••••••') delete patch.clientSecret;
+  if (patch.clientSecret === MASK) delete patch.clientSecret;
+  if (patch.kargo) { if (patch.kargo.geliverToken === MASK) delete patch.kargo.geliverToken; if (patch.kargo.codKey === MASK) delete patch.kargo.codKey; kargoCache = null; }
   config.set(patch);
   app.setLoginItemSettings({ openAtLogin: !!config.data.openAtLogin, args: ['--hidden'] });
   schedule(); pushStatus(); send('refresh');

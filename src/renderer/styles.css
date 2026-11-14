@@ -286,3 +286,19 @@ body.win .appbar { padding-right: 150px; }
 
 #ordInfo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .ord-toolbar input[type=search] { flex: 0 1 280px; min-width: 160px; }
+
+/* ---------- Kargo fisleri / adres hatalari ---------- */
+.badge.blue { background: var(--accent); color: #fff; }
+.badge.red { background: var(--err); color: #fff; }
+.menu .badge { margin-left: 4px; }
+.tool-badge { position: absolute; top: 2px; right: 1px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--err); color: #fff; font-size: 9px; font-weight: 700; display: grid; place-items: center; }
+.seg button .badge { margin-left: 4px; height: 15px; min-width: 16px; font-size: 9.5px; }
+.seg button.active .badge { background: rgba(255, 255, 255, .25); }
+.kargo-table td.cb, .kargo-table th.cb { width: 28px; text-align: center; }
+.kargo-table input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; margin: 0; }
+.kargo-table tr.sel td { background: rgba(55, 142, 240, .12); }
+.kargo-table .addr { max-width: 340px; color: #cfcfcf; font-size: 11px; }
+.act { display: flex; gap: 5px; justify-content: flex-end; white-space: nowrap; }
+.view-title { font-size: 13px; color: #fff; }
+.pref-body select { height: 26px; padding: 0 6px; border: 1px solid #111; border-radius: 3px; background: var(--input); color: var(--text); font: inherit; }
+.chip.err { background: rgba(227, 72, 80, .2); color: #ff8a8f; }

@@ -14,6 +14,8 @@
       <button class="menu" data-view="plan">Yerleşim</button>
       <button class="menu" data-view="sheets">Sayfalar</button>
       <button class="menu" data-view="orders">Siparişler<span class="new-dot hidden" title="Yeni sipariş"></span></button>
+      <button class="menu" data-view="kargo">Kargo fişleri <span class="badge blue hidden" data-count="labels"></span></button>
+      <button class="menu" data-view="adres">Adres hataları <span class="badge red hidden" data-count="errors"></span></button>
       <button class="menu" id="menuPrefs">Tercihler</button>
     </nav>
     <div class="appbar-right">
@@ -39,6 +41,8 @@
   <aside class="tools">
     <button class="tool active" data-view="plan" title="Sıradaki yerleşim"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="11"/><rect x="13" y="3" width="8" height="5"/><rect x="13" y="10" width="8" height="4"/><rect x="3" y="16" width="18" height="5"/></svg></button>
     <button class="tool" data-view="orders" title="Siparişler"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span class="new-dot hidden" title="Yeni sipariş"></span></button>
+    <button class="tool" data-view="kargo" title="Kargo fişleri"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></button>
+    <button class="tool" data-view="adres" title="Adres hataları"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><path d="M12 7v4M12 14h.01"/></svg><span class="tool-badge hidden" data-count="errors"></span></button>
     <button class="tool" data-view="sheets" title="Hazır sayfalar"><svg viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h6"/></svg></button>
     <span class="tool-sep"></span>
     <button class="tool" id="toolCheck" title="Şimdi kontrol et"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
@@ -53,6 +57,8 @@
       <button class="doc-tab active" data-view="plan">Sıradaki yerleşim <span class="muted" id="rollInfo"></span></button>
       <button class="doc-tab" data-view="sheets">Hazır sayfalar <span class="badge" id="sheetsCount">0</span></button>
       <button class="doc-tab" data-view="orders">Siparişler <span class="new-dot hidden" title="Yeni sipariş"></span></button>
+      <button class="doc-tab" data-view="kargo">Kargo fişleri <span class="badge blue hidden" data-count="labels"></span></button>
+      <button class="doc-tab" data-view="adres">Adres hataları <span class="badge red hidden" data-count="errors"></span></button>
     </div>
     <div class="pasteboard scroll">
       <section class="view" id="view-plan">
@@ -87,6 +93,33 @@
         <table class="ord-table">
           <thead><tr><th>Sipariş</th><th>Tarih</th><th>Müşteri</th><th>Ödeme</th><th>Kargo</th><th class="num">Tutar</th><th>Baskı dosyaları</th><th>Baskı</th></tr></thead>
           <tbody id="ordRows"><tr><td colspan="8" class="muted">Yükleniyor…</td></tr></tbody>
+        </table>
+      </section>
+      <section class="view hidden" id="view-kargo">
+        <div class="ord-toolbar">
+          <div class="seg" id="kargoTabs"><button data-k="cod" class="active">Kapıda ödeme (DHL) <span class="badge" id="kcCod">0</span></button><button data-k="geliver">Geliver <span class="badge" id="kcGel">0</span></button></div>
+          <div class="seg" id="kargoFilter"><button data-f="todo" class="active">Basılacaklar</button><button data-f="offer">Teklif bekleyen</button><button data-f="all">Tümü</button></div>
+          <span class="grow"></span>
+          <span class="muted small" id="kargoInfo"></span>
+          <button class="btn small" id="btnKargoRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button>
+          <button class="btn primary small" id="btnKargoPrint" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Seçilenleri bas</span></button>
+        </div>
+        <div class="ord-note hidden" id="kargoNote"></div>
+        <table class="ord-table kargo-table">
+          <thead id="kargoHead"></thead>
+          <tbody id="kargoRows"><tr><td class="muted">Yükleniyor…</td></tr></tbody>
+        </table>
+      </section>
+      <section class="view hidden" id="view-adres">
+        <div class="ord-toolbar">
+          <b class="view-title">Adres hataları</b>
+          <span class="muted small">Bu siparişlerin kargo fişi adres/telefon sorunu yüzünden alınamıyor. Shopify'da (ya da Geliver'de) düzeltin; düzelince listeden kendiliğinden düşer.</span>
+          <span class="grow"></span>
+          <button class="btn small" id="btnAdresRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button>
+        </div>
+        <table class="ord-table">
+          <thead><tr><th>Sipariş</th><th>Kargo</th><th>Müşteri</th><th>Adres</th><th>Sorun</th><th></th></tr></thead>
+          <tbody id="adresRows"><tr><td colspan="6" class="muted">Yükleniyor…</td></tr></tbody>
         </table>
       </section>
       <section class="view hidden" id="view-sheets">
@@ -133,6 +166,7 @@
         <a data-goto="set-card">Teşekkür kartı</a>
         <a data-goto="set-dirs">Klasörler</a>
         <a data-goto="set-print">Baskı</a>
+        <a data-goto="set-kargo">Kargo fişleri</a>
         <a data-goto="set-reset">Sıfırlama</a>
       </nav>
 <form class="pref-body scroll" id="settingsForm">
@@ -185,7 +219,20 @@
       <label>Hiç döndürülmeyecek ebatlar<input name="print.portraitLocked" placeholder="Boş: tüm ebatlar gerekirse 90° döner" /></label>
       <label>Photoshop<div class="pick"><input name="photoshopPath" placeholder="Otomatik bulunur" /><button type="button" class="btn ghost small" data-pick="file" data-target="photoshopPath">Seç</button></div><small id="psFound"></small></label>
       <label class="check"><input type="checkbox" name="openAtLogin" /> Bilgisayar açılınca otomatik başlat</label>
-          <h4 id="set-reset">Sıfırlama / yeniden indirme</h4>
+          <h4 id="set-kargo">Kargo fişleri</h4>
+      <label>Etiket yazıcısı (100×100 mm)<select name="kargo.printer" id="printerSelect"><option value="">Varsayılan yazıcı</option></select><small>Kargo fişleri bu yazıcıya, 100×100 mm sayfa boyutunda, kenar boşluğu olmadan sessizce basılır.</small></label>
+      <label>Geliver API anahtarı<input name="kargo.geliverToken" type="password" autocomplete="off" /><small>app.geliver.io › API Tokenlar</small></label>
+      <div class="row2">
+        <label>Kapıda ödeme etiket sunucusu<input name="kargo.codUrl" placeholder="https://tuhalf-etiket.….workers.dev" /></label>
+        <label>Sunucu anahtarı<input name="kargo.codKey" type="password" autocomplete="off" /></label>
+      </div>
+      <label>Kaç günlük gönderi gösterilsin<input name="kargo.days" type="number" min="1" max="60" /></label>
+      <div class="reset-box">
+        <b>Ayar dosyası</b>
+        <p class="muted small">Ofisteki diğer bilgisayarları tek seferde kurmak için: bir bilgisayarda “Dışa aktar” deyip dosyayı diğerlerinde “İçe aktar” ile açın. Dosyada Shopify ve kargo anahtarları vardır; paylaşmayın, iş bitince silin.</p>
+        <div class="update-actions"><button type="button" class="btn small" id="btnImport">İçe aktar…</button><button type="button" class="btn small" id="btnExport">Dışa aktar…</button></div>
+      </div>
+      <h4 id="set-reset">Sıfırlama / yeniden indirme</h4>
       <div class="reset-box">
         <p class="muted small">Programı yeni bir bilgisayara kurduğunda ya da dosyalar silindiğinde, girdiğin sipariş numarası ve sonrasındaki tüm siparişlerin baskı dosyaları yeniden indirilir. Klasörde zaten olan dosyalar tekrar inmez, kopya oluşmaz.</p>
         <div class="reset-row">

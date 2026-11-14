@@ -84,6 +84,39 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
   });
   await t('Durumu bilinmeyen siparis engellenmez', () => assert.strictEqual(holdReason(undefined), null));
 
+  console.log('Kargo fisleri');
+  const K = require('../src/main/kargo');
+  const now = Date.now(), ago = (h) => new Date(now - h * 3600e3).toISOString();
+  const SH = (id, st, h, ek = {}) => ({ id, statusCode: st, createdAt: ago(h), order: { orderCode: '#' + id, orderNumber: '78' + id, sourceIdentifier: 'x.myshopify.com' },
+    recipientAddress: { name: 'Ad ' + id, cityName: 'İzmir', districtName: 'Urla', address1: 'Sokak 1' }, responsiveLabelURL: LABEL_READY_URL(st, id), labelURL: null, trackingNumber: 'GLV' + id, ...ek });
+  const LABEL_READY_URL = (st, id) => (['TRACKING_CODE_CREATED', 'OFFER_ACCEPTED', 'LABEL_PRINTED', 'SHIPPED'].includes(st) ? 'https://api.geliver.io/api/v1/responsivelabels/' + id + '/600d' : null);
+  const pages = [[SH(2270, 'TRACKING_CODE_CREATED', 1), SH(2269, 'GOT_OFFERS', 2, { recipientAddress: { name: 'X', cityName: 'İzmir', districtName: null } }), SH(2268, 'SHIPPED', 3)],
+    [SH(2267, 'GOT_OFFERS', 5, { hasError: true, lastErrorMessage: 'Alıcı ilçesi bulunamadı' }), SH(2200, 'DELIVERED', 24 * 30)]];
+  const calls = [];
+  const gf = async (url, o) => { calls.push([url, o.headers.Authorization]); const p = Number(new URL(url).searchParams.get('page'));
+    return new Response(JSON.stringify({ result: true, totalPages: 2, data: pages[p - 1] || [] }), { status: 200 }); };
+  const gl = await K.geliverShipments('tok', 14, gf);
+  await t('Geliver: anahtarla sayfa sayfa ceker, eski gonderide durur', () => {
+    assert.strictEqual(calls[0][1], 'Bearer tok'); assert.deepStrictEqual(gl.map((s) => s.no), [2270, 2269, 2268, 2267]);
+  });
+  await t('Geliver: basilacak / teklif bekleyen / bitmis ayrimi', () =>
+    assert.deepStrictEqual(gl.map(K.geliverKind), ['ready', 'offer', 'done', 'offer']));
+  await t('Geliver: adres hatalari (hata mesaji ve eksik ilce)', () =>
+    assert.deepStrictEqual(gl.map(K.geliverAddressError), [null, 'İlçe bilgisi eksik', null, 'Alıcı ilçesi bulunamadı']));
+  await t('Geliver: anahtar yanlissa anlasilir hata', async () => {
+    await assert.rejects(K.geliverShipments('kotu', 14, async () => new Response('{}', { status: 401 })), /Yetkisiz/);
+    await assert.rejects(K.geliverShipments('', 14, gf), /anahtarı girilmemiş/);
+  });
+  let codCall;
+  const cf = async (url, o) => { codCall = [url, o.headers.Authorization];
+    return new Response(JSON.stringify(url.includes('/api/kapida') ? { siparisler: [{ id: 'gid://shopify/Order/1', no: '2271', sorun: 'ilçe bulunamadı' }], deneme: false }
+      : { html: '<section>x</section>', etiketler: ['2271'], hatalar: [['#2272', 'Telefon yok']] }), { status: 200 }); };
+  const co = await K.codOrders({ codUrl: 'https://w.dev/', codKey: 'k' }, 14, cf);
+  await t('Kapida odeme: sunucudan liste ve adres sorunu', () => { assert.strictEqual(codCall[0], 'https://w.dev/api/kapida?gun=14'); assert.strictEqual(codCall[1], 'Bearer k'); assert.strictEqual(co.orders[0].sorun, 'ilçe bulunamadı'); });
+  const cl = await K.codLabels({ codUrl: 'https://w.dev', codKey: 'k' }, ['gid://shopify/Order/1', 'gid://shopify/Order/2'], cf);
+  await t('Kapida odeme: secilen siparislerin etiketi + hatalar', () => { assert.match(codCall[0], /\/api\/etiket\?ids=gid%3A%2F%2Fshopify%2FOrder%2F1%2Cgid/); assert.deepStrictEqual(cl.etiketler, ['2271']); assert.strictEqual(cl.hatalar.length, 1); });
+  await t('Kapida odeme: sunucu ayarlanmamissa anlasilir hata', () => assert.rejects(K.codOrders({}, 14, cf), /ayarlanmamış/));
+
   console.log('Klasorler');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-'));
   await t('Mesai sonrasi ertesi gun', () => {
