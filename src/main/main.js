@@ -401,7 +401,10 @@ async function loadKargo(force) {
   const printed = state.data.labelsPrinted || {};
   const pay = state.data.pay || {};
   const out = { cod: [], geliver: [], errors: [], codError: null, geliverError: null, codTest: false, at: Date.now() };
-  const [g, c] = await Promise.allSettled([K.geliverShipments(k.geliverToken, k.days || 14), K.codOrders(k, k.days || 14)]);
+  const [g, c, b] = await Promise.allSettled([K.geliverShipments(k.geliverToken, k.days || 14), K.codOrders(k, k.days || 14), k.geliverToken ? K.geliverBalance(k.geliverToken) : Promise.reject(new Error('-'))]);
+  out.balance = b.status === 'fulfilled' ? b.value : null;
+  out.avgCost = Number(k.avgCost) || 167.19;   // HepsiJet ortalama kargo (KDV dahil)
+  out.lowBalance = Number(k.lowBalance) || 500;
   // Kapida odeme
   const codNos = new Set();
   if (c.status === 'fulfilled') {
@@ -425,6 +428,20 @@ async function loadKargo(force) {
       if (err && row.kind !== 'done') out.errors.push({ source: 'geliver', id: s.id, gid: s.gid, no: s.no, name: s.name, address: s.address, city: [s.district, s.city].filter(Boolean).join(' / '), error: err, link: row.admin, geliver: true, at: s.createdAt, row: s });
     }
   } else out.geliverError = g.reason.message;
+  // Teklif bekleyen Geliver gonderileri: odeme durumu (havalesi gelmemis siparise kargo alinmasin)
+  const offerRows = out.geliver.filter((r) => r.kind === 'offer' && r.no);
+  const noPay = offerRows.filter((r) => !pay[r.no] || Date.now() - pay[r.no].at > 10 * 60000).map((r) => r.no);
+  if (noPay.length) { try { updatePay(await fetchPayStatuses(config.data, noPay)); } catch { /* */ } }
+  // Liste cevabinda teklifler eksik gelebilir: odemesi alinmis olanlarin tekliflerini tek tek oku
+  const needOffer = offerRows.filter((r) => !r.hepsijet).slice(0, 25);
+  await Promise.all(needOffer.map(async (r) => {
+    try { const d = await K.geliverShipment(k.geliverToken, r.id); if (d.hepsijet) { r.hepsijet = d.hepsijet; r.price = r.price || d.hepsijet.total; r.provider = r.provider || d.hepsijet.provider; } } catch { /* */ }
+  }));
+  const pay2 = state.data.pay || {};
+  for (const r of out.geliver) {
+    const p = r.no ? pay2[r.no] : null;
+    r.pay = p ? { financial: p.financial || '', paid: p.financial === 'PAID', hold: holdReason(p), gateways: p.gateways || [] } : null;
+  }
   // Geliver adres hatalari: Shopify'daki guncel adres duzeltilmis mi? (Geliver adresi kendiliginden guncellemez)
   const gErr = out.errors.filter((e) => e.geliver && e.gid);
   if (gErr.length) {
@@ -502,6 +519,7 @@ ipcMain.handle('kargo', async (_e, force) => {
 ipcMain.handle('printers', async () => {
   try { return (await win.webContents.getPrintersAsync()).map((p) => ({ name: p.name, label: p.displayName || p.name, isDefault: p.isDefault })); } catch { return []; }
 });
+const tl = (n) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
 // ---------- Kargo fisleri: once onizleme penceresi, sonra secilen yaziciya baski ----------
 function testLabelHtml() {
   const bars = Array.from({ length: 46 }, (_, i) => `<i style="width:${[1, 2, 3, 1, 2][i % 5] * 0.35}mm"></i>`).join('');
@@ -574,6 +592,36 @@ ipcMain.handle('labels-open', async (_e, kind, ids = []) => {
     }
     return { error: 'Bilinmeyen fiş türü' };
   } catch (e) { log('error', 'Kargo fişleri hazırlanamadı: ' + e.message); return { error: e.message }; }
+});
+// Geliver: HepsiJet teklifini kabul edip etiketi satin al (bakiyeden duser) — her seferinde onay sorulur
+ipcMain.handle('geliver-buy', async (_e, id) => {
+  const k = config.data.kargo || {};
+  try {
+    const s = await K.geliverShipment(k.geliverToken, id);
+    const title = `#${s.no || '?'} ${s.name || ''}`.trim();
+    if (!['CREATED', 'GOT_OFFERS', 'FAILED'].includes(s.status)) return { error: `${title}: bu gönderi için etiket zaten alınmış ya da gönderi kapanmış (${s.statusText}).` };
+    if (s.no) { try { updatePay(await fetchPayStatuses(config.data, [s.no])); } catch { /* */ } }
+    const p = s.no ? (state.data.pay || {})[s.no] : null;
+    if (!p) return { error: `${title}: Shopify ödeme durumu okunamadı; satın alma yapılmadı.` };
+    const hold = holdReason(p);
+    if (hold) return { error: `${title}: ${hold}. Ödeme gelmeden kargo satın alınmaz.` };
+    if (p.financial !== 'PAID') return { error: `${title}: Shopify'da ödeme “Ödendi” değil (${p.financial || 'bilinmiyor'}). Kargo satın alınmadı.` };
+    const o = s.hepsijet;
+    if (!o) return { error: `${title}: Geliver'de HepsiJet teklifi yok. Gönderiyi Geliver'de açıp teklif alın.` };
+    let bal = null; try { bal = await K.geliverBalance(k.geliverToken); } catch { /* */ }
+    if (bal != null && bal < o.total) return { error: `Geliver bakiyesi yetersiz: ${tl(bal)} (gereken ${tl(o.total)}). Bakiye ekleyin.` };
+    const c = await dialog.showMessageBox(win, {
+      type: 'question', title: 'HepsiJet ile satın al', noLink: true, defaultId: 1, cancelId: 0, buttons: ['İptal', `Satın al · ${tl(o.total)}`],
+      message: `${title} için HepsiJet kargo etiketi satın alınacak.`,
+      detail: `Tutar: ${tl(o.total)} (Geliver bakiyesinden düşer)${bal != null ? `\nBakiye: ${tl(bal)} → ${tl(bal - o.total)}` : ''}\nAlıcı: ${s.name} — ${[s.district, s.city].filter(Boolean).join(' / ')}\nÖdeme: Shopify'da ödendi ✓`,
+    });
+    if (c.response !== 1) return { canceled: true };
+    const after = await K.geliverBuy(k.geliverToken, o.id);
+    kargoCache = null;
+    log('ok', `${title} HepsiJet etiketi satın alındı (${tl(o.total)}).`);
+    send('kargo-updated');
+    return { ok: true, id: s.id, pdfUrl: after && after.pdfUrl, total: o.total };
+  } catch (e) { log('error', 'Geliver satın alma: ' + e.message); return { error: e.message }; }
 });
 ipcMain.handle('labels-job', () => labelJob);
 ipcMain.handle('labels-printers', async (e) => {

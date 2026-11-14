@@ -205,7 +205,7 @@ function openDrawer(open) { $('#drawer').classList.toggle('open', open); $('#dra
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],[data-gsync],.order,.ord-file');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],[data-gsync],[data-gbuy],.order,.ord-file');
   if (!t) return;
   if (t.dataset.import) return doImport();
   if (t.dataset.gsync) {
@@ -218,6 +218,22 @@ document.addEventListener('click', async (ev) => {
   if (t.dataset.prefs) { openDrawer(true); setTimeout(() => gotoPref('set-' + t.dataset.prefs), 150); return; }
   if (t.dataset.url) return window.api.openUrl(t.dataset.url);
   if (t.dataset.kprint) return printKargo([t.dataset.kprint]);
+  if (t.dataset.gbuy) {
+    const id = t.dataset.gbuy, label = t.textContent;
+    t.disabled = true; t.textContent = 'Satın alınıyor…';
+    const r = await window.api.geliverBuy(id);
+    if (r.canceled || r.error) { if (r.error) toast(r.error, true); t.disabled = false; t.textContent = label; return; }
+    toast(`HepsiJet etiketi satın alındı (${money(r.total)}). Fiş hazırlanıyor…`);
+    for (let i = 0; i < 4; i++) {   // etiketin olusmasi birkac saniye surebilir
+      await new Promise((ok) => setTimeout(ok, 2500));
+      const k2 = await window.api.kargo(true);
+      if (!k2.error) { KG = k2; renderKargo(); }
+      const row = KG && (KG.geliver || []).find((x) => x.id === id);
+      if (row && row.pdfUrl) { const o = await window.api.labelsOpen('geliver', [id]); if (o && o.error) toast(o.error, true); return; }
+    }
+    toast('Etiket birazdan hazır olur; “Yazdırılacaklar”dan yazdırın.');
+    return;
+  }
   if (t.id === 'btnKargoTest' || t.closest('#btnKargoTest')) { const r = await window.api.labelsOpen('test'); if (r && r.error) toast(r.error, true); return; }
   if (t.dataset.kunmark) { await window.api.labelMark([t.dataset.kunmark], false); return loadKargo(false); }
   if (t.dataset.view) return setView(t.dataset.view);
@@ -382,6 +398,25 @@ function setCounts() {
   for (const el of document.querySelectorAll('[data-count="labels"]')) { el.textContent = todoCod + todoGel; el.classList.toggle('hidden', !(todoCod + todoGel)); }
   for (const el of document.querySelectorAll('[data-count="errors"]')) { el.textContent = errs; el.classList.toggle('hidden', !errs); }
 }
+// Teklif bekleyen Geliver gonderisi: odeme durumu personel icin net olsun
+function offerStatus(r) {
+  const p = r.pay;
+  if (p && p.hold) return `<span class="chip err">⚠ ${esc(p.hold)}</span><div class="sub warn-text">Havale gelmeden kargo SATIN ALMAYIN</div>`;
+  if (!p) return `<span class="chip cod">${esc(r.statusText)}</span><div class="sub">Ödeme durumu okunamadı — Shopify'dan kontrol edin</div>`;
+  if (!p.paid) return `<span class="chip cod">Ödeme alınmadı</span><div class="sub">Shopify: ${esc(p.financial || '—')} · kargo almayın</div>`;
+  return `<span class="chip paid">Ödendi</span><div class="sub">${r.hepsijet ? 'Kargo satın alınabilir' : 'HepsiJet teklifi yok — Geliver\'de açın'}</div>`;
+}
+// Geliver bakiyesi: kartta goster, azalinca uyar
+function renderBalance() {
+  const el = $('#gelBal'), w = $('#gelBalWarn');
+  if (!KG || KG.balance == null) { el.textContent = ''; w.classList.add('hidden'); return; }
+  const n = Math.floor(KG.balance / (KG.avgCost || 167.19));
+  const low = KG.balance < (KG.lowBalance || 500);
+  el.innerHTML = `Bakiye <b>${money(KG.balance)}</b> · ≈${n} kargo`;
+  el.classList.toggle('low', low);
+  w.classList.toggle('hidden', !low || KTAB !== 'geliver');
+  if (low) w.innerHTML = `<span>⚠ <b>Geliver bakiyesi azaldı: ${money(KG.balance)}.</b> Mevcut bakiyeyle ortalama <b>${n} kargo</b> gönderilebilir (HepsiJet ort. ${money(KG.avgCost || 167.19)}, KDV dahil).</span><button class="btn small primary" data-url="https://app.geliver.io/payment">Bakiye ekle</button>`;
+}
 function renderKargo() {
   if (!KG) return;
   setCounts();
@@ -419,16 +454,18 @@ function renderKargo() {
       const ready = r.kind === 'ready';
       st = r.printedAt ? `<span class="chip printed">Yazdırıldı ${fmtTime(r.printedAt)}</span>`
         : ready ? `<span class="chip unprinted">Yazdırılmadı</span><div class="sub">${esc(r.statusText)}</div>`
-        : r.kind === 'offer' ? `<span class="chip cod">${esc(r.statusText)}</span><div class="sub">Geliver'de teklif kabul edilmeli</div>`
+        : r.kind === 'offer' ? offerStatus(r)
         : `<span class="chip pending">${esc(r.statusText)}</span>`;
       if (can) act += `<button class="btn small" data-kprint="${esc(k)}" title="Önizleyip yazdırır (ücret yok)">${ready && !r.printedAt ? 'Yazdır' : 'Tekrar yazdır'}</button>`;
       if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="geliver:${esc(r.id)}" title="Yazdırılmadı olarak işaretle">↺</button>`;
+      if (r.kind === 'offer' && r.pay && r.pay.paid && !r.pay.hold && r.hepsijet) act += `<button class="btn small buy" data-gbuy="${esc(r.id)}" title="HepsiJet teklifini kabul edip etiketi satın alır (Geliver bakiyesinden düşer)">HepsiJet ile satın al · ${money(r.hepsijet.total)}</button>`;
       if (r.kind === 'offer') act += `<button class="btn ghost small" data-url="https://app.geliver.io/shipments?statusFilter=GOT_OFFERS">Geliver'de aç</button>`;
       if (r.trackingUrl) act += `<button class="btn ghost small" data-url="${esc(r.trackingUrl)}">Takip</button>`;
     }
     const ship = KTAB === 'cod' ? `<td class="num">${money(r.tutar)}</td>` : `<td>${esc(r.provider || '—')}${r.price != null ? `<div class="sub">${money(r.price)}${r.desi != null ? ' · ' + r.desi + ' desi' : ''}</div>` : ''}</td>`;
     const place = KTAB === 'cod' ? [r.ilce, r.il].filter(Boolean).join(' / ') || r.sehir : [r.district, r.city].filter(Boolean).join(' / ');
-    return `<tr class="${KSEL.has(k) ? 'sel' : ''}">
+    const held = KTAB === 'geliver' && r.kind === 'offer' && r.pay && r.pay.hold;
+    return `<tr class="${KSEL.has(k) ? 'sel' : ''}${held ? ' held' : ''}">
       <td class="cb">${can ? `<input type="checkbox" data-ksel="${esc(k)}" ${KSEL.has(k) ? 'checked' : ''}>` : ''}</td>
       <td class="no">#${esc(r.no || '?')}</td><td>${fmtD(KTAB === 'cod' ? r.tarih : r.createdAt)}</td>
       <td>${esc(KTAB === 'cod' ? r.ad : r.name) || '—'}</td>
@@ -439,6 +476,7 @@ function renderKargo() {
   $('#btnKargoPrint').lastChild.textContent = KSEL.size ? `Seçilenleri yazdır (${KSEL.size})` : 'Seçilenleri yazdır';
   $('#kargoDays').value = String(k.days || 14);
   $('#kargoInfo').textContent = KG.at ? `Güncellendi ${fmtTime(KG.at)}` : '';
+  renderBalance();
   renderAdres();
 }
 function renderAdres() {

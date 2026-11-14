@@ -119,10 +119,11 @@
           </button>
           <button data-k="geliver" class="carrier gel">
             <span class="c-ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></span>
-            <span class="c-txt"><b>Geliver</b><small>Ödemesi alınmış siparişler · anlaşmalı kargolar</small></span>
+            <span class="c-txt"><b>Geliver</b><small>Ödemesi alınmış siparişler · HepsiJet</small><small class="bal" id="gelBal"></small></span>
             <span class="c-count"><b id="kcGel">0</b><small>yazdırılacak</small></span>
           </button>
         </div>
+        <div class="bal-warn hidden" id="gelBalWarn"></div>
         <div class="kargo-sub">
           <div class="tabs-line" id="kargoFilter"><button data-f="todo" class="active">Yazdırılacaklar</button><button data-f="offer">Teklif bekleyen</button><button data-f="all">Tümü / eski fişler</button></div>
           <select id="kargoDays" class="days" title="Kaç günlük sipariş gösterilsin"><option value="14">Son 14 gün</option><option value="30">Son 30 gün</option><option value="60">Son 60 gün</option><option value="90">Son 90 gün</option></select>

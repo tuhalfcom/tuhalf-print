@@ -337,3 +337,12 @@ select.days { height: 32px; padding: 0 8px; border: 1px solid var(--line-2); bor
 .tabs-line button:hover { color: var(--text); }
 .tabs-line button.active { color: var(--text); border-bottom-color: var(--accent); }
 .kargo-sub select.days { height: 30px; }
+.carrier .c-txt small.bal { color: #cfd2d8; margin-top: 2px; }
+.carrier .c-txt small.bal b { color: var(--text); }
+.carrier .c-txt small.bal.low, .carrier .c-txt small.bal.low b { color: var(--err, #f0566a); }
+.bal-warn { display: flex; align-items: center; gap: 14px; justify-content: space-between; margin: 8px 0 4px; padding: 10px 14px; border-radius: 10px; background: rgba(240, 86, 106, .12); border: 1px solid rgba(240, 86, 106, .45); }
+.kargo-table tr.held td { background: rgba(240, 86, 106, .07); }
+.kargo-table tr.held td:first-child { box-shadow: inset 3px 0 0 #f0566a; }
+.warn-text { color: #f58d9b !important; font-weight: 600; }
+.btn.buy { background: #ff6000; border-color: #ff6000; color: #fff; }
+.btn.buy:hover:not(:disabled) { background: #ff7a26; }

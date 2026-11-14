@@ -23,22 +23,61 @@ async function getJson(url, headers, fetchFn = fetch) {
 }
 
 // ---------- Geliver ----------
+const pos = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+const PREFERRED = /hepsi\s*-?\s*jet/i;   // daima calistigimiz kargo
+function mapOffer(o) {
+  return { id: o.id, provider: o.providerCode || '', service: o.providerServiceCode || '', total: pos(o.totalAmount) || pos(o.totalAmountLocal) || pos(o.amount), accepted: !!o.isAccepted };
+}
+// Gonderinin HepsiJet teklifi (birden fazlaysa en ucuzu)
+function preferredOffer(s) {
+  const list = ((s.offers && s.offers.list) || []).concat(s.offers && s.offers.cheapest ? [s.offers.cheapest] : []).map(mapOffer)
+    .filter((o) => o.id && o.total && PREFERRED.test(o.provider + ' ' + o.service));
+  list.sort((a, b) => a.total - b.total);
+  return list[0] || null;
+}
 function mapShipment(s) {
   const o = s.order || {};
   const a = s.recipientAddress || {};
   const no = parseInt(String(o.orderCode || '').replace(/\D/g, ''), 10) || null;
   const cheapest = s.offers && s.offers.cheapest;
+  const hj = preferredOffer(s);
   return {
     id: s.id, no, gid: o.orderNumber || null, store: o.sourceIdentifier || '', createdAt: s.createdAt,
     name: a.name || '', city: a.cityName || a.city || '', district: a.districtName || a.district || '', address: [a.address1, a.address2].filter(Boolean).join(' '),
     phone: a.phone || '', status: s.statusCode || '', statusText: STATUS_TR[s.statusCode] || s.statusCode || '',
     provider: s.providerCode || (cheapest && cheapest.providerCode) || '', service: s.providerServiceCode || (cheapest && cheapest.providerServiceCode) || '',
-    price: s.totalAmount ? Number(s.totalAmount) : cheapest ? Number(cheapest.totalAmount) : null,
-    desi: s.desi != null ? Number(s.desi) : null,
+    price: pos(s.totalAmount) || (hj && hj.total) || (cheapest ? pos(cheapest.totalAmount) : null),
+    desi: pos(s.desi),
+    hepsijet: hj,
     labelUrl: s.responsiveLabelURL || null, pdfUrl: s.labelURL || null,
     tracking: s.trackingNumber || s.barcode || '', trackingUrl: s.trackingUrl || '',
     hasError: !!s.hasError, error: s.lastErrorMessage || '',
   };
+}
+
+// Geliver bakiyesi (TL)
+async function geliverBalance(token, fetchFn = fetch) {
+  const j = await getJson(`${GELIVER_API}/user/balance`, { Authorization: 'Bearer ' + token }, fetchFn);
+  const d = j.data;
+  const n = typeof d === 'object' && d ? Number(d.balance ?? d.amount ?? d.creditBalance) : Number(d);
+  if (!Number.isFinite(n)) throw new Error('Bakiye okunamadı');
+  return n;
+}
+async function geliverShipment(token, id, fetchFn = fetch) {
+  const j = await getJson(`${GELIVER_API}/shipments/${encodeURIComponent(id)}`, { Authorization: 'Bearer ' + token }, fetchFn);
+  return mapShipment(j.data || {});
+}
+// Teklifi kabul et = etiketi satin al (bakiyeden duser)
+async function geliverBuy(token, offerID, fetchFn = fetch) {
+  const r = await fetchFn(`${GELIVER_API}/transactions`, {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ offerID }), signal: AbortSignal.timeout(120000),
+  });
+  const t = await r.text();
+  let j = null; try { j = JSON.parse(t); } catch { /* */ }
+  if (r.status === 402) throw new Error('Geliver bakiyesi yetersiz. Bakiye ekleyip tekrar deneyin.');
+  if (!r.ok || (j && j.result === false)) throw new Error((j && (j.additionalMessage || j.message)) || `Geliver HTTP ${r.status}`);
+  return j && j.data && j.data.id ? mapShipment(j.data) : null;
 }
 
 // Son N gunun Geliver gonderileri (en yeniden eskiye)
@@ -198,4 +237,4 @@ async function updateGeliverAddress(token, shipmentId, address, fetchFn = fetch)
   return j && j.data ? mapShipment(j.data) : null;
 }
 
-module.exports = { geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };
+module.exports = { geliverBalance, geliverShipment, geliverBuy, preferredOffer, geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };

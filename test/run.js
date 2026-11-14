@@ -130,6 +130,17 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     const r2 = await A({ address1: 'turkuaz sokak no 9', address2: 'Urla', city: 'İzmir' });
     assert.strictEqual(r2.address.cityCode, '35'); assert.strictEqual(r2.address.districtName, 'Urla');
   });
+  await t('Geliver: HepsiJet teklifi secilir, sifir tutar yok sayilir, bakiye okunur', async () => {
+    const m = K.mapShipment({ id: 's1', statusCode: 'GOT_OFFERS', totalAmount: '0', desi: '0', order: { orderCode: '#2269' },
+      offers: { cheapest: { id: 'o1', providerCode: 'SURAT', totalAmount: '150' }, list: [
+        { id: 'o1', providerCode: 'SURAT', totalAmount: '150' }, { id: 'o2', providerCode: 'HEPSIJET', providerServiceCode: 'HEPSIJET_STANDART', totalAmount: '167.19' },
+        { id: 'o3', providerCode: 'HEPSIJET', totalAmount: '0' }] } });
+    assert.strictEqual(m.hepsijet.id, 'o2'); assert.strictEqual(m.hepsijet.total, 167.19);
+    assert.strictEqual(m.price, 167.19); assert.strictEqual(m.desi, null);
+    assert.strictEqual(K.mapShipment({ id: 's2', offers: { list: [{ id: 'x', providerCode: 'ARAS', totalAmount: '99' }] } }).hepsijet, null);
+    const f = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ result: true, data: 1795.47 }) });
+    assert.strictEqual(await K.geliverBalance('t', f), 1795.47);
+  });
   await t('Adres duzeltme (#2187): il yanlis secilmis (Afyon), adreste Fatih Istanbul yaziyor', async () => {
     const r = await A({ name: 'Mustafa Kapçak', address1: 'Alişan Sokak Nişanca Mahallesi Fatih İstanbul', address2: 'No5 daire7', city: 'İstanbul', zip: '034', province: 'Afyonkarahisar', provinceCode: 'TR-03' });
     assert.strictEqual(r.address.cityCode, '34'); assert.strictEqual(r.address.districtName, 'Fatih');

@@ -35,6 +35,8 @@ Soldaki tek menü: **Bugün** (günün işleri 1→4 ve uyarılar), **Baskı sı
 - **Adres hataları** (üst menü > Adres hataları): kargo fişi alınamayan siparişler (DHL: il/ilçe bulunamadı, telefon geçersiz; Geliver: gönderi hatası, eksik il/ilçe) ayrı ekranda durur. **Shopify'da düzelt** siparişi açar. Kapıda ödeme siparişleri Shopify'da düzeltilip **Yenile** denince listeden düşer. Geliver gönderilerinde adres Geliver'de ayrıca kayıtlıdır ve Shopify'dan kendiliğinden güncellenmez: Shopify'da düzeltip **Yenile** deyince satırda yeşil “Shopify'da düzeltilmiş” yazar, **Geliver'e aktar** ile Geliver'deki gönderi düzeltilir. Aktarmadan önce yazılacak adres onaya gelir. Müşteri ili yanlış seçip adrese doğrusunu yazdıysa (ör. İl: Afyonkarahisar, adres: Fatih İstanbul) adresteki il/ilçe kullanılır ve uyarı gösterilir.
 - **Kargo fişi basma:** “Bas / Tekrar bas” önce **önizleme penceresi** açar: fişler ekranda görünür, yazıcı (ZJ-9210 kendiliğinden seçilir) ve kağıt seçilir, **Yazdır** ile basılır. Geliver fişleri 100×130 mm gelir; 100×100 kağıda küçültülerek sığdırılır (istenirse “Kağıt”tan fişin kendi ölçüsü seçilir). Sessiz baskı olmazsa “Yazdırma penceresiyle…” Windows penceresini açar. Seçilen yazıcı ve kağıt hatırlanır.
 - **Eski fişler:** “Tümü / eski fişler” sekmesinde kargoya verilmiş siparişler de seçilip tekrar basılabilir (Geliver: ücretsiz; DHL: kayıtlı siparişte yeni kayıt açılmaz). Sağdaki listeden 14/30/60/90 gün seçilir. DHL'e henüz kayıtlı olmayan kapıda ödeme siparişi seçildiğinde önce “DHL'e kaydedilecek” onayı sorulur.
+- **Geliver “Teklif bekleyen”:** Her gönderide Shopify ödeme durumu görünür. Havalesi gelmemiş sipariş kırmızı satırla “Havale gelmeden kargo SATIN ALMAYIN” diye işaretlenir ve satın alma düğmesi çıkmaz. Ödemesi alınmış (ör. PayTR) siparişte **HepsiJet ile satın al** düğmesi vardır: tutar ve bakiye onaya gelir, onaylanınca etiket alınır ve fiş önizlemesi açılır. Program satın almadan hemen önce Shopify'dan ödemeyi tekrar kontrol eder.
+- **Geliver bakiyesi** Geliver kartında görünür (≈ kaç kargo gönderilebileceğiyle; HepsiJet ortalaması 167,19 ₺ KDV dahil). 500 ₺'nin altına düşünce “Bakiye ekle” uyarısı çıkar.
 - **Deneme fişi** (Kargo fişleri ekranı): kargo firmasına hiçbir şey göndermeden önizleme penceresinde örnek 100×100 fiş açar; yazıcıyı ve ölçüyü denemek içindir.
 - **Dosyaları resetle** BASKI klasörünün kendisini silmez, sadece içindeki sipariş klasörlerini siler.
 - **Ayar dosyası** (Tercihler > Kargo fişleri): bir bilgisayarda “Dışa aktar”, diğerlerinde “İçe aktar” ile tüm bilgisayarlar aynı ayarlarla kurulur. Dosyada anahtarlar var; paylaşmayın, iş bitince silin.
@@ -44,7 +46,7 @@ Soldaki tek menü: **Bugün** (günün işleri 1→4 ve uyarılar), **Baskı sı
 ## Derleme (geliştirici)
 ```
 npm install
-npm test            # 42 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
+npm test            # 43 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
 npm start           # geliştirme modunda aç
 npm run dist:win    # dist/Tuhalf-Print-Kurulum-1.1.0.exe
 npm run dist:mac    # dist/Tuhalf-Print-1.1.0-mac.dmg (Mac'te)
