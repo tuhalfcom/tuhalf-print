@@ -340,6 +340,8 @@ let KG = null, KTAB = 'cod', KFILTER = 'todo';
 const KSEL = new Set();
 const money = (n) => (n == null ? '—' : Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺');
 const fmtD = (t) => { if (!t) return '—'; const d = new Date(t); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
+// Secilebilir satir: fisi basilabilen (Geliver: PDF etiketi var; DHL: kayitli ya da henuz gonderilmemis)
+function kSelectable(r) { return KTAB === 'cod' ? !r.sorun && (r.etiketli || r.gonderim !== 'FULFILLED') : !!r.pdfUrl; }
 function codRows() {
   const rows = (KG.cod || []).filter((o) => o.gonderim !== 'FULFILLED' || KFILTER === 'all');
   if (KFILTER === 'todo') return rows.filter((o) => !o.sorun && !o.printedAt);
@@ -379,9 +381,9 @@ function renderKargo() {
   const rows = KTAB === 'cod' ? codRows() : gelRows();
   const keyOf = (r) => (KTAB === 'cod' ? r.id : r.id);
   for (const k of [...KSEL]) if (!rows.some((r) => keyOf(r) === k)) KSEL.delete(k);
-  const selectable = (r) => (KTAB === 'cod' ? !r.sorun && (r.etiketli || r.gonderim !== 'FULFILLED') : !!r.pdfUrl);
+  const selectable = kSelectable;
   const all = rows.filter(selectable);
-  $('#kargoHead').innerHTML = `<tr><th class="cb"><input type="checkbox" id="kAll" ${all.length && all.every((r) => KSEL.has(keyOf(r))) ? 'checked' : ''}></th><th>Sipariş</th><th>Tarih</th><th>Alıcı</th><th>Adres</th>${KTAB === 'cod' ? '<th class="num">Tahsilat</th>' : '<th>Kargo</th>'}<th>Durum</th><th></th></tr>`;
+  $('#kargoHead').innerHTML = `<tr><th class="cb">${all.length ? `<input type="checkbox" id="kAll" title="Hepsini seç (${all.length})" ${all.every((r) => KSEL.has(keyOf(r))) ? 'checked' : ''}>` : ''}</th><th>Sipariş</th><th>Tarih</th><th>Alıcı</th><th>Adres</th>${KTAB === 'cod' ? '<th class="num">Tahsilat</th>' : '<th>Kargo</th>'}<th>Durum</th><th></th></tr>`;
   $('#kargoRows').innerHTML = rows.map((r) => {
     const k = keyOf(r), can = selectable(r);
     let st, act = '';
@@ -458,7 +460,7 @@ $('#btnKargoRefresh').onclick = () => refreshKargoBtn($('#btnKargoRefresh'));
 $('#btnAdresRefresh').onclick = () => refreshKargoBtn($('#btnAdresRefresh'));
 $('#kargoRows').onchange = $('#kargoHead').onchange = (e) => {
   if (e.target.id === 'kAll') {
-    const rows = (KTAB === 'cod' ? codRows() : gelRows()).filter((r) => (KTAB === 'cod' ? !r.sorun && r.gonderim !== 'FULFILLED' : r.kind === 'ready'));
+    const rows = (KTAB === 'cod' ? codRows() : gelRows()).filter(kSelectable);
     for (const r of rows) e.target.checked ? KSEL.add(r.id) : KSEL.delete(r.id);
   } else if (e.target.dataset.ksel) { e.target.checked ? KSEL.add(e.target.dataset.ksel) : KSEL.delete(e.target.dataset.ksel); }
   renderKargo();

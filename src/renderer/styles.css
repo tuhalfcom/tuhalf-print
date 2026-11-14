@@ -310,3 +310,30 @@ body.mac .titlebar { padding-left: 80px; }
 
 .fix-ok { margin-top: 6px; color: #6fdcb2; font-size: 12px; }
 select.days { height: 32px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--input); color: var(--text); font: inherit; outline: none; }
+
+/* Kargo: iki ana kargo yontemi buyuk kartlar, filtreler ikincil (alt cizgili sekmeler) */
+.carrier-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 6px; }
+.carrier { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s, box-shadow .15s; }
+.carrier:hover { border-color: #4a4f59; }
+.carrier .c-ico { width: 46px; height: 46px; border-radius: 11px; display: grid; place-items: center; flex: none; }
+.carrier .c-ico svg { width: 24px; height: 24px; }
+.carrier.cod .c-ico { background: rgba(255, 204, 0, .13); color: #ffcc00; }
+.carrier.gel .c-ico { background: rgba(155, 123, 255, .16); color: var(--violet); }
+.carrier .c-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.carrier .c-txt b { font-size: 16px; }
+.carrier .c-txt small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carrier .c-count { display: flex; flex-direction: column; align-items: flex-end; }
+.carrier .c-count b { font-size: 26px; line-height: 1.05; }
+.carrier .c-count small { color: var(--muted); font-size: 11px; }
+.carrier:not(.active) { background: transparent; }
+.carrier:not(.active) .c-txt b, .carrier:not(.active) .c-count b { color: #b9bcc4; }
+.carrier.cod.active { border-color: #ffcc00; background: linear-gradient(rgba(255, 204, 0, .06), rgba(255, 204, 0, .06)), var(--card); box-shadow: 0 0 0 3px rgba(255, 204, 0, .10); }
+.carrier.gel.active { border-color: var(--violet); background: linear-gradient(rgba(155, 123, 255, .07), rgba(155, 123, 255, .07)), var(--card); box-shadow: 0 0 0 3px rgba(155, 123, 255, .12); }
+.carrier.cod.active .c-count b { color: #ffcc00; }
+.carrier.gel.active .c-count b { color: var(--violet); }
+.kargo-sub { display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); margin: 0 0 12px; }
+.tabs-line { display: flex; gap: 2px; }
+.tabs-line button { height: 40px; padding: 0 12px; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs-line button:hover { color: var(--text); }
+.tabs-line button.active { color: var(--text); border-bottom-color: var(--accent); }
+.kargo-sub select.days { height: 30px; }
