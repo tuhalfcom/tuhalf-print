@@ -435,25 +435,22 @@ async function loadKargo(force) {
 }
 
 // 100x100 etiketi secili yaziciya sessizce basar. src: { html } ya da { url }
-async function printLabel(src) {
-  const k = config.data.kargo || {};
-  const w = new BrowserWindow({ show: false, width: 420, height: 420, useContentSize: true, webPreferences: { sandbox: true, javascript: true } });
+// Bir HTML'i yaziciya gonderir (gizli pencere). silent=false: Windows yazdirma penceresi acilir.
+async function printHtml(html, { printer, wMm = 100, hMm = 100, silent = true }) {
+  const w = new BrowserWindow({ show: false, width: 500, height: 500, useContentSize: true, webPreferences: { sandbox: true, javascript: true } });
+  const tmp = path.join(app.getPath('temp'), `tuhalf-etiket-${Date.now()}.html`);
   try {
-    if (src.html) {
-      const tmp = path.join(app.getPath('temp'), `tuhalf-etiket-${Date.now()}.html`);
-      fs.writeFileSync(tmp, src.html);
-      await w.loadFile(tmp);
-      setTimeout(() => fs.rm(tmp, () => {}), 60000);
-    } else await w.loadURL(src.url);
-    await w.webContents.executeJavaScript('document.fonts ? document.fonts.ready.then(() => true) : true').catch(() => true);
-    await new Promise((r) => setTimeout(r, 400));
+    fs.writeFileSync(tmp, html);
+    await w.loadFile(tmp);
+    await w.webContents.executeJavaScript(`Promise.all([...document.images].map((i) => i.complete ? 1 : new Promise((r) => { i.onload = i.onerror = r; }))).then(() => document.fonts ? document.fonts.ready : 1).then(() => true)`).catch(() => true);
+    await new Promise((r) => setTimeout(r, 300));
     await new Promise((resolve, reject) => {
       w.webContents.print({
-        silent: true, printBackground: true, deviceName: k.printer || undefined,
-        pageSize: { width: 100000, height: 100000 }, margins: { marginType: 'none' },
-      }, (ok, reason) => (ok ? resolve() : reject(new Error(reason || 'Yazdırılamadı'))));
+        silent, printBackground: true, deviceName: printer || undefined,
+        pageSize: { width: Math.round(wMm * 1000), height: Math.round(hMm * 1000) }, margins: { marginType: 'none' },
+      }, (ok, reason) => (ok ? resolve() : reject(new Error(reason === 'cancelled' ? 'İptal edildi' : reason || 'Yazdırılamadı'))));
     });
-  } finally { if (!w.isDestroyed()) w.destroy(); }
+  } finally { if (!w.isDestroyed()) w.destroy(); setTimeout(() => fs.rm(tmp, () => {}), 60000); }
 }
 function markLabels(keys) {
   const printed = { ...(state.data.labelsPrinted || {}) };
@@ -493,22 +490,8 @@ ipcMain.handle('kargo', async (_e, force) => {
 ipcMain.handle('printers', async () => {
   try { return (await win.webContents.getPrintersAsync()).map((p) => ({ name: p.name, label: p.displayName || p.name, isDefault: p.isDefault })); } catch { return []; }
 });
-// Geliver etiketleri: her gonderi ayri baski
-ipcMain.handle('print-geliver', async (_e, ids) => {
-  const data = await loadKargo(false);
-  const rows = data.geliver.filter((r) => ids.includes(r.id) && r.labelUrl);
-  const done = [], failed = [];
-  for (const r of rows) {
-    try { await printLabel({ url: r.labelUrl }); done.push(r.id); log('ok', `Geliver etiketi basıldı: #${r.no || '?'} ${r.name}`); }
-    catch (e) { failed.push(`#${r.no || '?'}: ${e.message}`); log('error', `Geliver etiketi basılamadı (#${r.no || '?'}): ${e.message}`); }
-  }
-  markLabels(done.map((id) => 'geliver:' + id));
-  return { printed: done.length, failed };
-});
-// Deneme fisi: kargo firmasina hicbir sey gondermeden yazici ve 100x100 olcusunu dener
-ipcMain.handle('print-test-label', async () => {
-  const k = config.data.kargo || {};
-  const printer = k.printer || 'Varsayılan yazıcı';
+// ---------- Kargo fisleri: once onizleme penceresi, sonra secilen yaziciya baski ----------
+function testLabelHtml() {
   const bars = Array.from({ length: 46 }, (_, i) => `<i style="width:${[1, 2, 3, 1, 2][i % 5] * 0.35}mm"></i>`).join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 @page{size:100mm 100mm;margin:0}*{box-sizing:border-box;margin:0}html,body{width:100mm;height:100mm}
@@ -519,24 +502,91 @@ h1{font-size:9mm;text-align:center;border:0.8mm solid #000;padding:1.5mm}.r{disp
 </style></head><body><h1>DENEME FİŞİ</h1>
 <div class="r"><b>Tuhalf Print</b><span>${new Date().toLocaleString('tr-TR')}</span></div>
 <div class="box"><b>ALICI:</b> Örnek Müşteri<br>Örnek Mah. Deneme Sok. No:1<br>Kadıköy / İstanbul</div>
-<div class="bc">${bars}</div><div class="s">Yazıcı: ${printer.replace(/[<>&]/g, '')}</div>
+<div class="bc">${bars}</div><div class="s">Yazıcı: ${'${YAZICI}'}</div>
 <div class="c"><span>◤ sol üst</span><span>100 × 100 mm</span><span>sağ üst ◥</span></div></body></html>`;
-  try { await printLabel({ html }); log('ok', `Deneme fişi basıldı (${printer})`); return { ok: true, printer }; }
-  catch (e) { log('error', 'Deneme fişi basılamadı: ' + e.message); return { error: e.message }; }
-});
-// Kapida odeme: sunucu DHL'e kaydeder, etiketleri tek baski isi olarak basar
-ipcMain.handle('print-cod', async (_e, ids) => {
+  return html;
+}
+let labelWin = null, labelJob = null;
+function openLabelWindow(job) {
+  labelJob = job;
+  if (labelWin && !labelWin.isDestroyed()) { labelWin.webContents.reload(); labelWin.show(); labelWin.focus(); return; }
+  labelWin = new BrowserWindow({
+    width: 1000, height: 820, minWidth: 760, minHeight: 560, backgroundColor: '#16171b', title: 'Kargo fişleri — önizleme', icon: ICON, autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, '..', 'renderer', 'labels-preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+  labelWin.loadFile(path.join(__dirname, '..', 'renderer', 'labels.html'));
+  labelWin.on('closed', () => { labelWin = null; labelJob = null; });
+}
+async function fetchPdf(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`etiket indirilemedi (HTTP ${r.status})`);
+  return Buffer.from(await r.arrayBuffer()).toString('base64');
+}
+ipcMain.handle('labels-open', async (_e, kind, ids = []) => {
   const k = config.data.kargo || {};
   try {
-    const r = await K.codLabels(k, ids);
-    if (r.html) await printLabel({ html: r.html });
-    markLabels((r.etiketler || []).map((no) => 'cod:' + no));
-    for (const no of r.etiketler || []) log('ok', `Kapıda ödeme etiketi basıldı: #${no}`);
-    for (const [n, m] of r.hatalar || []) log('warn', `${n} etiketi hazırlanamadı: ${m}`);
-    kargoCache = null;
-    return { printed: (r.etiketler || []).length, errors: r.hatalar || [], test: !!r.deneme };
-  } catch (e) { log('error', 'Kapıda ödeme etiketleri alınamadı: ' + e.message); return { error: e.message }; }
+    if (kind === 'test') { openLabelWindow({ kind, title: 'Deneme fişi', items: [{ key: null, title: 'Deneme fişi', html: testLabelHtml() }], errors: [], note: 'Kargo firmasına hiçbir şey gönderilmedi.' }); return { ok: true }; }
+    const data = await loadKargo(false);
+    if (kind === 'geliver') {
+      const rows = data.geliver.filter((r) => ids.includes(r.id));
+      const items = [], errors = [];
+      await Promise.all(rows.map(async (r) => {
+        const title = `#${r.no || '?'} ${r.name || ''}`.trim();
+        if (!r.pdfUrl) { errors.push(`${title}: Geliver bu gönderi için etiket vermedi (etiket satın alınmamış olabilir)`); return; }
+        try { items.push({ key: 'geliver:' + r.id, title, pdf: await fetchPdf(r.pdfUrl) }); } catch (e) { errors.push(`${title}: ${e.message}`); }
+      }));
+      items.sort((a, b) => a.title.localeCompare(b.title, 'tr', { numeric: true }));
+      if (!items.length) return { error: errors[0] || 'Seçili gönderilerin etiketi yok.' };
+      openLabelWindow({ kind, title: `Geliver · ${items.length} fiş`, items, errors });
+      return { ok: true };
+    }
+    if (kind === 'cod') {
+      const rows = data.cod.filter((r) => ids.includes(r.id));
+      const yeni = rows.filter((r) => !r.etiketli);
+      if (yeni.length && !data.codTest) {
+        const c = await dialog.showMessageBox(win, {
+          type: 'question', title: 'DHL kaydı', noLink: true, defaultId: 1, cancelId: 0, buttons: ['İptal', 'Kaydet ve fişleri göster'],
+          message: `${yeni.length} sipariş DHL'e yeni kargo olarak kaydedilecek.`,
+          detail: `${yeni.map((r) => '#' + r.no).join(', ')}\n\nDHL'e daha önce kaydedilmiş siparişlerin fişi yeni kayıt açmadan tekrar gösterilir.`,
+        });
+        if (c.response !== 1) return { canceled: true };
+      }
+      const r = await K.codLabels(k, ids);
+      kargoCache = null;
+      for (const [n, m] of r.hatalar || []) log('warn', `${n} etiketi hazırlanamadı: ${m}`);
+      const errors = (r.hatalar || []).map(([n, m]) => `${n}: ${m}`);
+      if (!r.html || !(r.etiketler || []).length) return { error: errors[0] || 'Etiket hazırlanamadı.' };
+      openLabelWindow({ kind, title: `Kapıda ödeme (DHL) · ${r.etiketler.length} fiş`, items: [{ keys: r.etiketler.map((no) => 'cod:' + no), title: r.etiketler.map((n) => '#' + n).join(', '), html: r.html, count: r.etiketler.length }], errors, note: r.deneme ? 'DENEME modu: fişler “ÖRNEK” yazılı, DHL\'e kaydedilmedi.' : '' });
+      send('kargo-updated');
+      return { ok: true };
+    }
+    return { error: 'Bilinmeyen fiş türü' };
+  } catch (e) { log('error', 'Kargo fişleri hazırlanamadı: ' + e.message); return { error: e.message }; }
 });
+ipcMain.handle('labels-job', () => labelJob);
+ipcMain.handle('labels-printers', async (e) => {
+  let list = [];
+  try { list = await e.sender.getPrintersAsync(); } catch { /* */ }
+  const k = config.data.kargo || {};
+  const names = list.map((p) => p.name);
+  const pick = (k.printer && names.includes(k.printer) && k.printer)
+    || (list.find((p) => /zj|9210|zjiang|termal|thermal|etiket|label|xprinter|barkod/i.test(p.name + ' ' + (p.displayName || ''))) || {}).name
+    || (list.find((p) => p.isDefault) || {}).name || '';
+  return { list: list.map((p) => ({ name: p.name, label: p.displayName || p.name, isDefault: p.isDefault })), selected: pick, paper: k.paper || '100' };
+});
+ipcMain.handle('labels-print', async (_e, o) => {
+  const printer = o.printer || '';
+  const html = String(o.html || '').replace(/\$\{YAZICI\}/g, printer.replace(/[<>&]/g, '') || 'Varsayılan yazıcı');
+  try {
+    await printHtml(html, { printer, wMm: o.wMm || 100, hMm: o.hMm || 100, silent: o.silent !== false });
+    config.set({ kargo: { ...(config.data.kargo || {}), printer, ...(o.paper ? { paper: o.paper } : {}) } });
+    if (o.keys && o.keys.length) markLabels(o.keys);
+    log('ok', `${o.count || 1} kargo fişi yazıcıya gönderildi (${printer || 'varsayılan yazıcı'})`);
+    send('kargo-updated');
+    return { ok: true };
+  } catch (e) { log('error', `Kargo fişi basılamadı (${printer || 'varsayılan'}): ${e.message}`); return { error: e.message }; }
+});
+ipcMain.handle('kargo-days', (_e, d) => { config.set({ kargo: { ...(config.data.kargo || {}), days: Number(d) || 14 } }); kargoCache = null; return true; });
 ipcMain.handle('label-mark', (_e, keys, on) => {
   if (on) markLabels(keys);
   else { const p = { ...(state.data.labelsPrinted || {}) }; for (const k of keys) delete p[k]; state.data.labelsPrinted = p; state.save(); kargoCache = null; }

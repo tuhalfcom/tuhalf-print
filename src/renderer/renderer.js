@@ -217,11 +217,7 @@ document.addEventListener('click', async (ev) => {
   if (t.dataset.prefs) { openDrawer(true); setTimeout(() => gotoPref('set-' + t.dataset.prefs), 150); return; }
   if (t.dataset.url) return window.api.openUrl(t.dataset.url);
   if (t.dataset.kprint) return printKargo([t.dataset.kprint]);
-  if (t.id === 'btnKargoTest' || t.closest('#btnKargoTest')) {
-    const r = await window.api.printTestLabel();
-    if (r.error) toast('Deneme fişi basılamadı: ' + r.error, true); else toast(`Deneme fişi gönderildi → ${r.printer}`);
-    return;
-  }
+  if (t.id === 'btnKargoTest' || t.closest('#btnKargoTest')) { const r = await window.api.labelsOpen('test'); if (r && r.error) toast(r.error, true); return; }
   if (t.dataset.kunmark) { await window.api.labelMark([t.dataset.kunmark], false); return loadKargo(false); }
   if (t.dataset.view) return setView(t.dataset.view);
   if (t.dataset.goto) return gotoPref(t.dataset.goto);
@@ -383,7 +379,7 @@ function renderKargo() {
   const rows = KTAB === 'cod' ? codRows() : gelRows();
   const keyOf = (r) => (KTAB === 'cod' ? r.id : r.id);
   for (const k of [...KSEL]) if (!rows.some((r) => keyOf(r) === k)) KSEL.delete(k);
-  const selectable = (r) => (KTAB === 'cod' ? !r.sorun && r.gonderim !== 'FULFILLED' : r.kind === 'ready');
+  const selectable = (r) => (KTAB === 'cod' ? !r.sorun && (r.etiketli || r.gonderim !== 'FULFILLED') : !!r.pdfUrl);
   const all = rows.filter(selectable);
   $('#kargoHead').innerHTML = `<tr><th class="cb"><input type="checkbox" id="kAll" ${all.length && all.every((r) => KSEL.has(keyOf(r))) ? 'checked' : ''}></th><th>Sipariş</th><th>Tarih</th><th>Alıcı</th><th>Adres</th>${KTAB === 'cod' ? '<th class="num">Tahsilat</th>' : '<th>Kargo</th>'}<th>Durum</th><th></th></tr>`;
   $('#kargoRows').innerHTML = rows.map((r) => {
@@ -394,7 +390,7 @@ function renderKargo() {
         : r.printedAt ? `<span class="chip printed">Basıldı ${fmtTime(r.printedAt)}</span>`
         : r.etiketli ? '<span class="chip ready">DHL\'e kayıtlı</span><div class="sub">Tekrar basılabilir</div>'
         : r.gonderim === 'FULFILLED' ? '<span class="chip pending">Gönderildi</span>' : '<span class="chip unprinted">Basılmadı</span>';
-      if (can) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt ? 'Tekrar bas' : 'Bas'}</button>`;
+      if (can) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt || r.etiketli ? 'Tekrar bas' : 'Bas'}</button>`;
       if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="cod:${esc(r.no)}" title="Basılmadı olarak işaretle">↺</button>`;
       if (r.admin) act += `<button class="btn ghost small" data-url="${esc(r.admin)}">Shopify</button>`;
     } else {
@@ -403,8 +399,7 @@ function renderKargo() {
         : ready ? `<span class="chip unprinted">Basılmadı</span><div class="sub">${esc(r.statusText)}</div>`
         : r.kind === 'offer' ? `<span class="chip cod">${esc(r.statusText)}</span><div class="sub">Geliver'de teklif kabul edilmeli</div>`
         : `<span class="chip pending">${esc(r.statusText)}</span>`;
-      if (ready) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt ? 'Tekrar bas' : 'Bas'}</button>`;
-      else if (r.labelUrl) act += `<button class="btn ghost small" data-kprint="${esc(k)}" title="Kargoya verilmiş gönderinin etiketini tekrar basar (ücret yok)">Etiketi bas</button>`;
+      if (can) act += `<button class="btn small" data-kprint="${esc(k)}" title="Önizleyip basar (ücret yok)">${ready && !r.printedAt ? 'Bas' : 'Tekrar bas'}</button>`;
       if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="geliver:${esc(r.id)}" title="Basılmadı olarak işaretle">↺</button>`;
       if (r.kind === 'offer') act += `<button class="btn ghost small" data-url="https://app.geliver.io/shipments?statusFilter=GOT_OFFERS">Geliver'de aç</button>`;
       if (r.trackingUrl) act += `<button class="btn ghost small" data-url="${esc(r.trackingUrl)}">Takip</button>`;
@@ -420,6 +415,7 @@ function renderKargo() {
   }).join('') || `<tr><td colspan="8" class="muted">${KFILTER === 'todo' ? 'Basılacak kargo fişi yok.' : 'Gösterilecek gönderi yok.'}</td></tr>`;
   $('#btnKargoPrint').disabled = !KSEL.size;
   $('#btnKargoPrint').lastChild.textContent = KSEL.size ? `Seçilenleri bas (${KSEL.size})` : 'Seçilenleri bas';
+  $('#kargoDays').value = String(k.days || 14);
   $('#kargoInfo').textContent = KG.at ? `Güncellendi ${fmtTime(KG.at)}` : '';
   renderAdres();
 }
@@ -450,6 +446,7 @@ async function loadKargo(force) {
   KG = r; renderKargo(); renderHome();
 }
 $('#kargoTabs').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; KTAB = b.dataset.k; KSEL.clear(); for (const x of $('#kargoTabs').children) x.classList.toggle('active', x === b); renderKargo(); };
+$('#kargoDays').onchange = async (e) => { await window.api.kargoDays(Number(e.target.value)); if (CFG && CFG.kargo) CFG.kargo.days = Number(e.target.value); KSEL.clear(); loadKargo(true); };
 $('#kargoFilter').onclick = (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; KFILTER = b.dataset.f; KSEL.clear(); renderKargo(); };
 async function refreshKargoBtn(b) {
   const label = b.lastChild.textContent;
@@ -469,15 +466,12 @@ $('#kargoRows').onchange = $('#kargoHead').onchange = (e) => {
 async function printKargo(ids) {
   if (!ids.length) return;
   const b = $('#btnKargoPrint'); b.disabled = true;
+  toast('Fişler hazırlanıyor…');
   try {
-    const r = KTAB === 'cod' ? await window.api.printCod(ids) : await window.api.printGeliver(ids);
-    if (r.error) toast(r.error, true);
-    else {
-      const errs = (r.errors || []).length + (r.failed || []).length;
-      toast(`${r.printed} kargo fişi yazıcıya gönderildi` + (errs ? ` · ${errs} sipariş basılamadı (Adres hataları / Etkinlik)` : '') + (r.test ? ' · DENEME modu' : ''), !!errs && !r.printed);
-    }
-    KSEL.clear();
-    await loadKargo(KTAB === 'cod');
+    const r = await window.api.labelsOpen(KTAB === 'cod' ? 'cod' : 'geliver', ids);
+    if (r && r.error) toast(r.error, true);
+    else if (r && r.ok) KSEL.clear();
+    renderKargo();
   } finally { b.disabled = !KSEL.size; }
 }
 $('#btnKargoPrint').onclick = () => printKargo([...KSEL]);

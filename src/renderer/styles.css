@@ -309,3 +309,4 @@ body.mac .titlebar { padding-left: 80px; }
 @media (max-width: 1200px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } .step:nth-child(2)::after { display: none; } }
 
 .fix-ok { margin-top: 6px; color: #6fdcb2; font-size: 12px; }
+select.days { height: 32px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--input); color: var(--text); font: inherit; outline: none; }

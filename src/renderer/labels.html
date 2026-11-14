@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:; frame-src 'self' about:" />
+  <title>Kargo fişleri — önizleme</title>
+  <style>
+    :root { --bg:#16171a; --card:#22242a; --line:#2e3138; --text:#e8e9ec; --muted:#9a9ea8; --accent:#4c8dff; --ok:#34c38f; --err:#f0566a; --warn:#f0a33a; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { font: 13px/1.5 "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: #1c1d21; flex-wrap: wrap; }
+    h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: 600; }
+    label { color: var(--muted); }
+    select { height: 34px; min-width: 200px; max-width: 280px; background: #17181b; color: var(--text); border: 1px solid #3a3e46; border-radius: 7px; padding: 0 8px; font: inherit; }
+    .btn { height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #3a3e46; background: #2a2d34; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+    .btn:hover:not(:disabled) { background: #30333b; }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.ghost { background: transparent; }
+    .grow { flex: 1; }
+    .hidden { display: none !important; }
+    .msg { margin: 12px 18px 0; padding: 10px 14px; border-radius: 8px; background: rgba(240,86,106,.12); border: 1px solid rgba(240,86,106,.4); }
+    .msg.info { background: rgba(76,141,255,.1); border-color: rgba(76,141,255,.35); }
+    .msg.ok { background: rgba(52,195,143,.12); border-color: rgba(52,195,143,.45); }
+    .msg ul { margin: 4px 0 0; padding-left: 18px; }
+    main { flex: 1; overflow: auto; padding: 18px; display: flex; flex-wrap: wrap; gap: 18px; align-content: flex-start; justify-content: center; }
+    .lbl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .lbl .t { font-weight: 600; font-size: 12px; color: var(--muted); max-width: 340px; text-align: center; }
+    .lbl img { width: 340px; background: #fff; display: block; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+    .lbl iframe { width: 420px; height: 560px; border: 0; background: #ddd; border-radius: 4px; }
+    .loading { color: var(--muted); padding: 40px; }
+    .hint { color: var(--muted); font-size: 12px; padding: 0 18px 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Kargo fişleri</h1>
+    <label for="printer">Yazıcı</label>
+    <select id="printer"></select>
+    <label for="paper" id="paperLbl" class="hidden">Kağıt</label>
+    <select id="paper" class="hidden" style="min-width:200px"></select>
+    <span class="grow"></span>
+    <button class="btn ghost" id="btnDialog" title="Windows yazdırma penceresini açar (yazıcı ve kağıt ayarını orada seçersiniz)">Yazdırma penceresiyle…</button>
+    <button class="btn primary" id="btnPrint" disabled>Yazdır</button>
+    <button class="btn" id="btnClose">Kapat</button>
+  </header>
+  <div id="msgs"></div>
+  <main id="list"><div class="loading">Fişler hazırlanıyor…</div></main>
+  <div class="hint">Fişler 100×100 mm kağıda, kenar boşluğu olmadan basılır. Yazıcı listede yoksa Windows'ta yüklü olduğundan emin olun.</div>
+  <script src="vendor/pdf.min.js"></script>
+  <script src="labels.js"></script>
+</body>
+</html>
