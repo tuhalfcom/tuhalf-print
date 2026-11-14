@@ -473,6 +473,14 @@ ipcMain.handle('geliver-sync', async (_e, shipmentId) => {
     if (!e || !e.shopAddr) return { error: 'Shopify adresi bulunamadı; Yenile deyip tekrar deneyin.' };
     const r = await K.toGeliverAddress(k.geliverToken, e.shopAddr);
     if (r.error) return { error: r.error };
+    const A = r.address;
+    const ok = await dialog.showMessageBox(win, {
+      type: r.note ? 'warning' : 'question', title: `#${e.no} adresini Geliver'e aktar`, noLink: true, defaultId: 1, cancelId: 0,
+      buttons: ['İptal', 'Geliver\'e aktar'],
+      message: `Geliver'deki gönderiye şu adres yazılacak:`,
+      detail: `${A.name}\n${[A.address1, A.address2].filter(Boolean).join(' ')}\n${A.districtName} / ${A.cityName}${A.zip ? '  ' + A.zip : ''}\n${A.phone}${r.note ? '\n\n⚠ ' + r.note : ''}`,
+    });
+    if (ok.response !== 1) return { canceled: true };
     const upd = await K.updateGeliverAddress(k.geliverToken, shipmentId, r.address);
     log('ok', `#${e.no} adresi Geliver'e aktarıldı: ${r.address.districtName} / ${r.address.cityName}`);
     kargoCache = null;
@@ -496,6 +504,25 @@ ipcMain.handle('print-geliver', async (_e, ids) => {
   }
   markLabels(done.map((id) => 'geliver:' + id));
   return { printed: done.length, failed };
+});
+// Deneme fisi: kargo firmasina hicbir sey gondermeden yazici ve 100x100 olcusunu dener
+ipcMain.handle('print-test-label', async () => {
+  const k = config.data.kargo || {};
+  const printer = k.printer || 'Varsayılan yazıcı';
+  const bars = Array.from({ length: 46 }, (_, i) => `<i style="width:${[1, 2, 3, 1, 2][i % 5] * 0.35}mm"></i>`).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+@page{size:100mm 100mm;margin:0}*{box-sizing:border-box;margin:0}html,body{width:100mm;height:100mm}
+body{font-family:Arial,sans-serif;padding:4mm;border:0.6mm solid #000;display:flex;flex-direction:column;gap:2.5mm}
+h1{font-size:9mm;text-align:center;border:0.8mm solid #000;padding:1.5mm}.r{display:flex;justify-content:space-between;font-size:3.6mm}
+.box{border:0.4mm solid #000;padding:2mm;font-size:3.8mm;line-height:1.35}.bc{display:flex;gap:0.35mm;height:16mm;justify-content:center}
+.bc i{display:block;background:#000;height:100%}.s{font-size:3mm;text-align:center}.c{display:flex;justify-content:space-between;font-size:2.6mm}
+</style></head><body><h1>DENEME FİŞİ</h1>
+<div class="r"><b>Tuhalf Print</b><span>${new Date().toLocaleString('tr-TR')}</span></div>
+<div class="box"><b>ALICI:</b> Örnek Müşteri<br>Örnek Mah. Deneme Sok. No:1<br>Kadıköy / İstanbul</div>
+<div class="bc">${bars}</div><div class="s">Yazıcı: ${printer.replace(/[<>&]/g, '')}</div>
+<div class="c"><span>◤ sol üst</span><span>100 × 100 mm</span><span>sağ üst ◥</span></div></body></html>`;
+  try { await printLabel({ html }); log('ok', `Deneme fişi basıldı (${printer})`); return { ok: true, printer }; }
+  catch (e) { log('error', 'Deneme fişi basılamadı: ' + e.message); return { error: e.message }; }
 });
 // Kapida odeme: sunucu DHL'e kaydeder, etiketleri tek baski isi olarak basar
 ipcMain.handle('print-cod', async (_e, ids) => {
@@ -554,12 +581,11 @@ ipcMain.handle('reset-files', async () => {
     type: 'warning', title: 'Dosyaları resetle', noLink: true, defaultId: 0, cancelId: 0,
     buttons: ['İptal', 'Kalıcı olarak sil'],
     message: days.length ? `${days.length} sipariş klasörü ve içindeki ${files} dosya kalıcı olarak silinecek.` : 'Silinecek sipariş klasörü yok. İndirme ve baskı geçmişi sıfırlanacak.',
-    detail: `Klasör: ${root}\nİndirilen dosyalar, dizilmiş kaynaklar ve hazırlanmış PSD sayfaları silinir; indirme ve baskı geçmişi sıfırlanır. Bu işlem geri alınamaz.\n\nSonra Tercihler > Sıfırlama'dan "Yeniden indir" ile istediğin siparişten itibaren temiz başlayabilirsin. O zamana kadar sadece yeni gelen siparişler otomatik iner.`,
+    detail: `Klasör: ${root}\n${path.basename(root)} klasörünün kendisi silinmez; sadece içindeki sipariş klasörleri (gün-ay-yıl-SIPARISLER) silinir.\nİndirilen dosyalar, dizilmiş kaynaklar ve hazırlanmış PSD sayfaları silinir; indirme ve baskı geçmişi sıfırlanır. Bu işlem geri alınamaz.\n\nSonra Tercihler > Sıfırlama'dan "Yeniden indir" ile istediğin siparişten itibaren temiz başlayabilirsin. O zamana kadar sadece yeni gelen siparişler otomatik iner.`,
   });
   if (r.response !== 1) return { canceled: true };
   const failed = [];
   for (const d of days) { try { fs.rmSync(d.path, { recursive: true, force: true }); } catch (e) { failed.push(d.name); } }
-  try { if (fs.existsSync(root) && !fs.readdirSync(root).length) fs.rmdirSync(root); } catch { /* */ }
   try { fs.rmSync(path.join(app.getPath('userData'), 'thumbs'), { recursive: true, force: true }); } catch { /* */ }
   state.data.downloaded = []; state.data.arranged = {}; state.data.printed = {};
   state.data.resetAt = Date.now(); state.data.ordersSeenAt = Date.now();

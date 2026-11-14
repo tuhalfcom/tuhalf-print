@@ -120,7 +120,7 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
   const dist = async (url, o = {}) => {
     if ((o.method || 'GET') === 'PATCH') { global.PATCHED = JSON.parse(o.body); return new Response(JSON.stringify({ result: true, data: { id: 'sh1', statusCode: 'GOT_OFFERS', order: { orderCode: '#2187' }, recipientAddress: { name: 'M K', cityName: 'İstanbul', districtName: 'Fatih' } } }), { status: 200 }); }
     const cc = new URL(url).searchParams.get('cityCode');
-    const list = { '34': ['Adalar', 'Fatih', 'Eyüpsultan', 'Beyoğlu'], '35': ['Urla', 'Konak'] }[cc] || [];
+    const list = { '34': ['Adalar', 'Fatih', 'Eyüpsultan', 'Beyoğlu'], '35': ['Urla', 'Konak'], '03': ['Merkez', 'Sandıklı', 'Dinar'] }[cc] || [];
     return new Response(JSON.stringify({ result: true, data: list.map((n, i) => ({ cityCode: cc, districtID: 1000 + i, name: n })) }), { status: 200 });
   };
   const A = (x) => K.toGeliverAddress('tok', x, dist);
@@ -129,6 +129,15 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.strictEqual(r.address.cityCode, '34'); assert.strictEqual(r.address.districtID, 1001); assert.strictEqual(r.address.districtName, 'Fatih');
     const r2 = await A({ address1: 'turkuaz sokak no 9', address2: 'Urla', city: 'İzmir' });
     assert.strictEqual(r2.address.cityCode, '35'); assert.strictEqual(r2.address.districtName, 'Urla');
+  });
+  await t('Adres duzeltme (#2187): il yanlis secilmis (Afyon), adreste Fatih Istanbul yaziyor', async () => {
+    const r = await A({ name: 'Mustafa Kapçak', address1: 'Alişan Sokak Nişanca Mahallesi Fatih İstanbul', address2: 'No5 daire7', city: 'İstanbul', zip: '034', province: 'Afyonkarahisar', provinceCode: 'TR-03' });
+    assert.strictEqual(r.address.cityCode, '34'); assert.strictEqual(r.address.districtName, 'Fatih');
+    assert.strictEqual(r.address.zip, ''); assert.match(r.note, /Afyonkarahisar/);
+  });
+  await t('Adres duzeltme: sadece il yazilmissa Merkez ilcesi', async () => {
+    const r = await A({ address1: 'Cumhuriyet mah 5', city: 'Afyon', provinceCode: 'TR-03' });
+    assert.strictEqual(r.address.cityCode, '03'); assert.strictEqual(r.address.districtName, 'Merkez');
   });
   await t('Adres duzeltme: il/ilce bulunamazsa anlasilir hata', async () => {
     assert.match((await A({ address1: 'x', city: 'Şehir' })).error, /il bulunamadı/);

@@ -32,7 +32,9 @@ Soldaki tek menü: **Bugün** (günün işleri 1→4 ve uyarılar), **Baskı sı
   - **Kapıda ödeme (DHL):** Kapıda ödeme siparişleri, tuhalf etiket sunucusundan (Cloudflare `tuhalf-etiket`) gelir. **Bas** dediğinde sunucu siparişi DHL'e kaydeder ve 100×100 fişi verir; fiş etiket yazıcısına basılır. Bu, Shopify yöneticisindeki “DHL Kapıda Ödeme Etiketi” ile aynı iştir.
   - **Geliver:** Geliver'de etiketi alınmış (kod alınmış) gönderilerin fişleri buradan basılır. “Teklif alındı” durumundakiler için önce Geliver'de teklif kabul edilmelidir. Kapıda ödeme siparişleri Geliver listesinde gösterilmez.
   - Basılanlar “Basıldı” olur, ↺ ile geri alınır. Fişler Tercihler > Kargo fişleri'nde seçilen yazıcıya 100×100 mm, kenar boşluksuz basılır.
-- **Adres hataları** (üst menü > Adres hataları): kargo fişi alınamayan siparişler (DHL: il/ilçe bulunamadı, telefon geçersiz; Geliver: gönderi hatası, eksik il/ilçe) ayrı ekranda durur. **Shopify'da düzelt** siparişi açar. Kapıda ödeme siparişleri Shopify'da düzeltilip **Yenile** denince listeden düşer. Geliver gönderilerinde adres Geliver'de ayrıca kayıtlıdır ve Shopify'dan kendiliğinden güncellenmez: Shopify'da düzeltip **Yenile** deyince satırda yeşil “Shopify'da düzeltilmiş” yazar, **Geliver'e aktar** ile Geliver'deki gönderi düzeltilir.
+- **Adres hataları** (üst menü > Adres hataları): kargo fişi alınamayan siparişler (DHL: il/ilçe bulunamadı, telefon geçersiz; Geliver: gönderi hatası, eksik il/ilçe) ayrı ekranda durur. **Shopify'da düzelt** siparişi açar. Kapıda ödeme siparişleri Shopify'da düzeltilip **Yenile** denince listeden düşer. Geliver gönderilerinde adres Geliver'de ayrıca kayıtlıdır ve Shopify'dan kendiliğinden güncellenmez: Shopify'da düzeltip **Yenile** deyince satırda yeşil “Shopify'da düzeltilmiş” yazar, **Geliver'e aktar** ile Geliver'deki gönderi düzeltilir. Aktarmadan önce yazılacak adres onaya gelir. Müşteri ili yanlış seçip adrese doğrusunu yazdıysa (ör. İl: Afyonkarahisar, adres: Fatih İstanbul) adresteki il/ilçe kullanılır ve uyarı gösterilir.
+- **Deneme fişi** (Kargo fişleri ekranı): kargo firmasına hiçbir şey göndermeden yazıcıya 100×100 deneme fişi basar. Geliver'de kargoya verilmiş gönderilerin etiketi de “Tümü” sekmesinden **Etiketi bas** ile ücretsiz tekrar basılabilir.
+- **Dosyaları resetle** BASKI klasörünün kendisini silmez, sadece içindeki sipariş klasörlerini siler.
 - **Ayar dosyası** (Tercihler > Kargo fişleri): bir bilgisayarda “Dışa aktar”, diğerlerinde “İçe aktar” ile tüm bilgisayarlar aynı ayarlarla kurulur. Dosyada anahtarlar var; paylaşmayın, iş bitince silin.
 - **Yeni bilgisayara kurulum / sıfırlama:** Tercihler > Sıfırlama'da sipariş numarasını girip **Yeniden indir** de. O sipariş ve sonrasındaki baskı dosyaları tekrar iner (son 120 gün). Klasörde zaten olan dosyalar tekrar inmez.
 - Klasörler: `Masaüstü\BASKI\GG-AA-YY-SIPARISLER\`: `_Dizildi` (dizilen kaynaklar), `_Sayfalar` (PSD sayfalar).
@@ -40,7 +42,7 @@ Soldaki tek menü: **Bugün** (günün işleri 1→4 ve uyarılar), **Baskı sı
 ## Derleme (geliştirici)
 ```
 npm install
-npm test            # 40 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
+npm test            # 42 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
 npm start           # geliştirme modunda aç
 npm run dist:win    # dist/Tuhalf-Print-Kurulum-1.1.0.exe
 npm run dist:mac    # dist/Tuhalf-Print-1.1.0-mac.dmg (Mac'te)

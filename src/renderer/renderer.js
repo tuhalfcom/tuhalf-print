@@ -210,13 +210,18 @@ document.addEventListener('click', async (ev) => {
   if (t.dataset.gsync) {
     t.disabled = true; t.textContent = 'Aktarılıyor…';
     const r = await window.api.geliverSync(t.dataset.gsync);
-    if (r.error) { toast(r.error, true); t.disabled = false; t.textContent = "Geliver'e aktar"; return; }
+    if (r.canceled || r.error) { if (r.error) toast(r.error, true); t.disabled = false; t.textContent = "Geliver'e aktar"; return; }
     toast(`Adres Geliver'e aktarıldı: ${r.address.districtName} / ${r.address.cityName}`);
     return loadKargo(true);
   }
   if (t.dataset.prefs) { openDrawer(true); setTimeout(() => gotoPref('set-' + t.dataset.prefs), 150); return; }
   if (t.dataset.url) return window.api.openUrl(t.dataset.url);
   if (t.dataset.kprint) return printKargo([t.dataset.kprint]);
+  if (t.id === 'btnKargoTest' || t.closest('#btnKargoTest')) {
+    const r = await window.api.printTestLabel();
+    if (r.error) toast('Deneme fişi basılamadı: ' + r.error, true); else toast(`Deneme fişi gönderildi → ${r.printer}`);
+    return;
+  }
   if (t.dataset.kunmark) { await window.api.labelMark([t.dataset.kunmark], false); return loadKargo(false); }
   if (t.dataset.view) return setView(t.dataset.view);
   if (t.dataset.goto) return gotoPref(t.dataset.goto);
@@ -399,6 +404,7 @@ function renderKargo() {
         : r.kind === 'offer' ? `<span class="chip cod">${esc(r.statusText)}</span><div class="sub">Geliver'de teklif kabul edilmeli</div>`
         : `<span class="chip pending">${esc(r.statusText)}</span>`;
       if (ready) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt ? 'Tekrar bas' : 'Bas'}</button>`;
+      else if (r.labelUrl) act += `<button class="btn ghost small" data-kprint="${esc(k)}" title="Kargoya verilmiş gönderinin etiketini tekrar basar (ücret yok)">Etiketi bas</button>`;
       if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="geliver:${esc(r.id)}" title="Basılmadı olarak işaretle">↺</button>`;
       if (r.kind === 'offer') act += `<button class="btn ghost small" data-url="https://app.geliver.io/shipments?statusFilter=GOT_OFFERS">Geliver'de aç</button>`;
       if (r.trackingUrl) act += `<button class="btn ghost small" data-url="${esc(r.trackingUrl)}">Takip</button>`;

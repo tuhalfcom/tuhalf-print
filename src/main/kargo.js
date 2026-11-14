@@ -106,13 +106,29 @@ function norm(x) {
 const IL_KOD = Object.fromEntries(IL.map((n, i) => [norm(n), String(i + 1).padStart(2, '0')]));
 IL_KOD[norm('Icel')] = '33'; IL_KOD[norm('Afyon')] = '03'; IL_KOD[norm('Maras')] = '46'; IL_KOD[norm('Urfa')] = '63'; IL_KOD[norm('Antep')] = '27';
 
+// Il adayi listesi: once musterinin yazdigi sehir/adres, sonra Shopify'da secilen il.
+// (Musteri ili yanlis secip adrese dogrusunu yazabiliyor: or. Il=Afyon, Sehir=Istanbul)
+function cityCandidates(a) {
+  const out = [];
+  const add = (k) => { if (k && !out.includes(k)) out.push(k); };
+  add(IL_KOD[norm(a.city)]);
+  const text = ` ${norm([a.city, a.address1, a.address2].join(' '))} `;
+  for (const [n, k] of Object.entries(IL_KOD)) if (text.includes(` ${n} `)) add(k);
+  const pc = String(a.provinceCode || '').toUpperCase();
+  if (/^TR-\d{1,2}$/.test(pc)) add(pc.slice(3).padStart(2, '0'));
+  add(IL_KOD[norm(a.province)]);
+  return out;
+}
 function cityCodeOf(a) {
   const pc = String(a.provinceCode || '').toUpperCase();
   if (/^TR-\d{1,2}$/.test(pc)) return pc.slice(3).padStart(2, '0');
   for (const f of [a.province, a.city]) { const k = IL_KOD[norm(f)]; if (k) return k; }
-  const text = ` ${norm([a.city, a.address1, a.address2].join(' '))} `;
-  const hits = Object.entries(IL_KOD).filter(([n]) => text.includes(` ${n} `)).map(([, k]) => k);
-  return new Set(hits).size === 1 ? hits[0] : null;
+  return cityCandidates(a)[0] || null;
+}
+function shopifyIlOf(a) {
+  const pc = String(a.provinceCode || '').toUpperCase();
+  const k = /^TR-\d{1,2}$/.test(pc) ? pc.slice(3).padStart(2, '0') : IL_KOD[norm(a.province)];
+  return k ? IL[Number(k) - 1] : '';
 }
 
 const districtCache = new Map();
@@ -125,26 +141,43 @@ async function geliverDistricts(token, cityCode, fetchFn = fetch) {
 }
 
 // Shopify adresini Geliver adres bicimine cevirir. { address } ya da { error }
-async function toGeliverAddress(token, a, fetchFn = fetch) {
-  if (!a) return { error: 'Shopify adresi okunamadı' };
-  const cityCode = cityCodeOf(a);
-  if (!cityCode) return { error: 'Shopify adresinde il bulunamadı — Shopify\'da “İl” alanını seçin' };
-  const ds = await geliverDistricts(token, cityCode, fetchFn);
-  const ilAdi = IL[Number(cityCode) - 1] || '';
-  let d = null;
+function findDistrict(ds, ilAdi, a) {
   for (const field of [a.city, a.address2, a.address1]) {
     const t = ` ${norm(field)} `;
     const hits = ds.filter((x) => norm(x.name) && norm(x.name) !== norm(ilAdi) && t.includes(` ${norm(x.name)} `));
-    if (hits.length) { d = hits.sort((x, y) => y.name.length - x.name.length)[0]; break; }
+    if (hits.length) return hits.sort((x, y) => y.name.length - x.name.length)[0];
   }
-  if (!d && norm(a.city) === norm(ilAdi)) d = ds.find((x) => norm(x.name) === 'merkez') || null;
-  if (!d) return { error: `Shopify adresinde ilçe bulunamadı — Shopify'da “Şehir/İlçe” alanına ilçeyi yazın (${ilAdi})` };
+  return null;
+}
+async function toGeliverAddress(token, a, fetchFn = fetch) {
+  if (!a) return { error: 'Shopify adresi okunamadı' };
+  const cands = cityCandidates(a);
+  if (!cands.length) return { error: 'Shopify adresinde il bulunamadı — Shopify\'da “İl” alanını seçin' };
+  let cityCode = null, d = null;
+  for (const c of cands) {
+    const found = findDistrict(await geliverDistricts(token, c, fetchFn), IL[Number(c) - 1] || '', a);
+    if (found) { cityCode = c; d = found; break; }
+  }
+  if (!d) {
+    // Ilce yazilmamis: sehir alani il adinin kendisiyse Merkez ilcesi
+    for (const c of cands) {
+      if (IL_KOD[norm(a.city)] !== c) continue;
+      const m = (await geliverDistricts(token, c, fetchFn)).find((x) => norm(x.name) === 'merkez');
+      if (m) { cityCode = c; d = m; break; }
+    }
+  }
+  const iller = cands.map((c) => IL[Number(c) - 1]).join(' / ');
+  if (!d) return { error: `Adreste ilçe bulunamadı (${iller}). Shopify'da adres satırına ya da “Şehir” alanına ilçeyi yazın, sonra Yenile.` };
+  const ilAdi = IL[Number(cityCode) - 1];
+  const sIl = shopifyIlOf(a);
   const name = a.name || [a.firstName, a.lastName].filter(Boolean).join(' ');
   return {
     address: {
-      name, phone: a.phone || '', address1: a.address1 || '', address2: a.address2 || '', zip: a.zip || '',
+      name, phone: a.phone || '', address1: a.address1 || '', address2: a.address2 || '',
+      zip: /^\d{5}$/.test(String(a.zip || '').trim()) ? String(a.zip).trim() : '',
       countryCode: 'TR', cityCode, cityName: ilAdi, districtID: d.districtID, districtName: d.name, isRecipientAddress: true,
     },
+    note: sIl && norm(sIl) !== norm(ilAdi) ? `Shopify'da il “${sIl}” seçili, ama adreste ${ilAdi} / ${d.name} yazıyor — ${ilAdi} kullanıldı.` : '',
   };
 }
 
@@ -165,4 +198,4 @@ async function updateGeliverAddress(token, shipmentId, address, fetchFn = fetch)
   return j && j.data ? mapShipment(j.data) : null;
 }
 
-module.exports = { geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, norm, codAddresses };
+module.exports = { geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };
