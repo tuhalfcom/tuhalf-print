@@ -7,66 +7,55 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Uygulama cubugu -->
-  <header class="appbar">
+  <!-- Ust serit: marka + durum (pencere dugmeleri sagda) -->
+  <header class="titlebar">
     <div class="brand"><img src="../../build/icon.png" alt="" class="logo" /><span class="brand-name">Tuhalf Print</span><span class="brand-sub" id="ver">—</span></div>
-    <nav class="menus">
-      <button class="menu" data-view="plan">Yerleşim</button>
-      <button class="menu" data-view="sheets">Sayfalar</button>
-      <button class="menu" data-view="orders">Siparişler<span class="new-dot hidden" title="Yeni sipariş"></span></button>
-      <button class="menu" data-view="kargo">Kargo fişleri <span class="badge blue hidden" data-count="labels"></span></button>
-      <button class="menu" data-view="adres">Adres hataları <span class="badge red hidden" data-count="errors"></span></button>
-      <button class="menu" id="menuPrefs">Tercihler</button>
-    </nav>
-    <div class="appbar-right">
-      <button class="btn update hidden" id="btnUpdateTop" title="Güncelleme"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span id="updTopText">Güncelleme</span></button>
-      <button class="icon-btn" id="btnSettings" title="Tercihler"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-    </div>
+    <span class="tsep"></span>
+    <div class="top-status" id="topStatus"><span class="dot"></span><span id="statusText">Hazırlanıyor…</span></div>
+    <button class="btn ghost small" id="btnCheck"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Şimdi kontrol et</button>
+    <span class="grow"></span>
+    <button class="btn update hidden" id="btnUpdateTop" title="Güncelleme"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span id="updTopText">Güncelleme</span></button>
   </header>
 
-  <!-- Secenek cubugu -->
-  <div class="optbar">
-    <button class="btn" id="btnCheck"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Şimdi kontrol et</button>
-    <div class="top-status" id="topStatus"><span class="dot"></span><span id="statusText">Hazırlanıyor…</span></div>
-    <span class="sep"></span>
-    <span class="opt-text" id="planSummary">—</span>
-    <span class="sep"></span>
-    <label class="switch" title="Tam satır oluşturmayan bekleyen tasarımları da diz"><input type="checkbox" id="forceAll" /><span>Bekleyenleri de diz</span></label>
+  <!-- Tek menu -->
+  <nav class="side">
+    <button class="nav-item" data-view="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-label">Bugün</span></button>
+    <div class="nav-group">Baskı</div>
+    <button class="nav-item" data-view="plan"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="11" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="4" rx="1"/><rect x="3" y="16" width="18" height="5" rx="1"/></svg><span class="nav-label">Baskı sırası</span><span class="nav-badge hidden" data-count="plan"></span></button>
+    <button class="nav-item" data-view="sheets"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span class="nav-label">Hazır sayfalar</span><span class="nav-badge" id="sheetsCount">0</span></button>
+    <div class="nav-group">Sipariş ve kargo</div>
+    <button class="nav-item" data-view="orders"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/><path d="M9 13h8M9 17h5"/></svg><span class="nav-label">Siparişler</span><span class="new-dot hidden" title="Yeni sipariş"></span></button>
+    <button class="nav-item" data-view="kargo"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg><span class="nav-label">Kargo fişleri</span><span class="nav-badge blue hidden" data-count="labels"></span></button>
+    <button class="nav-item" data-view="adres"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><path d="M12 7v4M12 14h.01"/></svg><span class="nav-label">Adres hataları</span><span class="nav-badge red hidden" data-count="errors"></span></button>
     <span class="grow"></span>
-    <button class="btn primary" id="btnBuild" disabled><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>Sayfaları hazırla</button>
-    <button class="btn" id="btnPrintAll" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Basılmamışları bas</span></button>
-  </div>
+    <button class="nav-item" id="toolFolder"><svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></svg><span class="nav-label">İndirme klasörü</span></button>
+    <button class="nav-item" id="btnSettings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="nav-label">Tercihler</span></button>
+  </nav>
 
-  <!-- Arac seridi -->
-  <aside class="tools">
-    <button class="tool active" data-view="plan" title="Sıradaki yerleşim"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="11"/><rect x="13" y="3" width="8" height="5"/><rect x="13" y="10" width="8" height="4"/><rect x="3" y="16" width="18" height="5"/></svg></button>
-    <button class="tool" data-view="orders" title="Siparişler"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span class="new-dot hidden" title="Yeni sipariş"></span></button>
-    <button class="tool" data-view="kargo" title="Kargo fişleri"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></button>
-    <button class="tool" data-view="adres" title="Adres hataları"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><path d="M12 7v4M12 14h.01"/></svg><span class="tool-badge hidden" data-count="errors"></span></button>
-    <button class="tool" data-view="sheets" title="Hazır sayfalar"><svg viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h6"/></svg></button>
-    <span class="tool-sep"></span>
-    <button class="tool" id="toolCheck" title="Şimdi kontrol et"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
-    <button class="tool" id="toolFolder" title="İndirme klasörünü aç"><svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
-    <span class="grow"></span>
-    <button class="tool" id="toolPrefs" title="Tercihler"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
-  </aside>
+  <main class="main scroll">
+    <section class="view" id="view-home">
+      <header class="page-head">
+          <div class="page-icon blue"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg></div>
+          <div class="page-titles"><h1>Bugün</h1><p>Günün işleri tek bakışta: soldan sağa 1 → 4.</p></div>
+          <div class="page-actions"></div>
+        </header>
+      <div class="setup hidden" id="setupCard"></div>
+      <div class="flow" id="homeFlow"></div>
+      <div class="alerts" id="homeAlerts"></div>
+    </section>
 
-  <!-- Calisma alani -->
-  <main class="workspace">
-    <div class="doc-tabs">
-      <button class="doc-tab active" data-view="plan">Sıradaki yerleşim <span class="muted" id="rollInfo"></span></button>
-      <button class="doc-tab" data-view="sheets">Hazır sayfalar <span class="badge" id="sheetsCount">0</span></button>
-      <button class="doc-tab" data-view="orders">Siparişler <span class="new-dot hidden" title="Yeni sipariş"></span></button>
-      <button class="doc-tab" data-view="kargo">Kargo fişleri <span class="badge blue hidden" data-count="labels"></span></button>
-      <button class="doc-tab" data-view="adres">Adres hataları <span class="badge red hidden" data-count="errors"></span></button>
-    </div>
-    <div class="pasteboard scroll">
-      <section class="view" id="view-plan">
+    <section class="view hidden" id="view-plan">
+      <header class="page-head">
+          <div class="page-icon violet"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="11" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="4" rx="1"/><rect x="3" y="16" width="18" height="5" rx="1"/></svg></div>
+          <div class="page-titles"><h1>Baskı sırası</h1><p>Gelen siparişlerin rulo sayfalara yerleşimi. <span id="rollInfo"></span></p></div>
+          <div class="page-actions"><label class="switch" title="Tam satır oluşturmayan bekleyen tasarımları da diz"><input type="checkbox" id="forceAll" /><span>Bekleyenleri de diz</span></label><button class="btn primary" id="btnBuild" disabled><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>Sayfaları hazırla</button></div>
+        </header>
+      <div class="infobar" id="planSummary">—</div>
         <div class="artboards" id="plan"></div>
         <div class="waiting hidden" id="waitingBox">
           <div class="waiting-head">
             <b id="waitingTitle">Bekleyen</b>
-            <span class="muted small">Tam satır oluşturmadığı için sonraki siparişlerin yanına dizilecek. Hemen basmak için üstteki “Bekleyenleri de diz” kutusunu işaretleyin.</span>
+            <span class="muted small">Tam satır oluşturmadığı için sonraki siparişlerin yanına dizilecek. Hemen basmak için yukarıdaki “Bekleyenleri de diz” anahtarını açın.</span>
           </div>
           <div class="waiting-list" id="waitingList"></div>
         </div>
@@ -77,9 +66,24 @@
           </div>
           <div class="waiting-list" id="heldList"></div>
         </div>
-      </section>
-      </section>
-      <section class="view hidden" id="view-orders">
+    </section>
+
+    <section class="view hidden" id="view-sheets">
+      <header class="page-head">
+          <div class="page-icon green"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg></div>
+          <div class="page-titles"><h1>Hazır sayfalar</h1><p>Photoshop’ta hazırlanan baskı sayfaları. Kontrol edip basın.</p></div>
+          <div class="page-actions"><button class="btn primary" id="btnPrintAll" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Basılmamışları bas</span></button></div>
+        </header>
+      <div class="sheet-grid" id="sheets"></div>
+    </section>
+
+    <section class="view hidden" id="view-orders">
+      <header class="page-head">
+          <div class="page-icon orange"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/><path d="M9 13h8M9 17h5"/></svg></div>
+          <div class="page-titles"><h1>Siparişler</h1><p>Son 14 günün siparişleri: müşteri, ödeme, kargo ve baskı durumu.</p></div>
+          <div class="page-actions"><div class="seg" id="ordMode"><button data-m="table" class="active">Sipariş listesi</button><button data-m="files">İndirilen dosyalar</button></div><button class="btn" id="btnOrdRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button></div>
+        </header>
+      <div id="ordTableWrap">
         <div class="ord-toolbar">
           <input id="ordSearch" type="search" placeholder="Sipariş no, müşteri, şehir ara…" />
           <div class="seg" id="ordFilter">
@@ -87,63 +91,57 @@
           </div>
           <span class="grow"></span>
           <span class="muted small" id="ordInfo"></span>
-          <button class="btn small" id="btnOrdRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button>
         </div>
         <div class="ord-note hidden" id="ordNote"></div>
         <table class="ord-table">
           <thead><tr><th>Sipariş</th><th>Tarih</th><th>Müşteri</th><th>Ödeme</th><th>Kargo</th><th class="num">Tutar</th><th>Baskı dosyaları</th><th>Baskı</th></tr></thead>
           <tbody id="ordRows"><tr><td colspan="8" class="muted">Yükleniyor…</td></tr></tbody>
         </table>
-      </section>
-      <section class="view hidden" id="view-kargo">
+      </div>
+      <div id="ordFilesWrap" class="hidden">
+        <div class="infobar" id="ordersSummary">—</div>
+        <div class="files-list" id="orders"></div>
+      </div>
+    </section>
+
+    <section class="view hidden" id="view-kargo">
+      <header class="page-head">
+          <div class="page-icon blue"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></div>
+          <div class="page-titles"><h1>Kargo fişleri</h1><p>100×100 etiketler: kapıda ödeme (DHL) ve Geliver.</p></div>
+          <div class="page-actions"><button class="btn" id="btnKargoRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button><button class="btn primary" id="btnKargoPrint" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Seçilenleri bas</span></button></div>
+        </header>
+      <div class="setup hidden" id="kargoSetup"></div>
         <div class="ord-toolbar">
           <div class="seg" id="kargoTabs"><button data-k="cod" class="active">Kapıda ödeme (DHL) <span class="badge" id="kcCod">0</span></button><button data-k="geliver">Geliver <span class="badge" id="kcGel">0</span></button></div>
           <div class="seg" id="kargoFilter"><button data-f="todo" class="active">Basılacaklar</button><button data-f="offer">Teklif bekleyen</button><button data-f="all">Tümü</button></div>
           <span class="grow"></span>
           <span class="muted small" id="kargoInfo"></span>
-          <button class="btn small" id="btnKargoRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button>
-          <button class="btn primary small" id="btnKargoPrint" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Seçilenleri bas</span></button>
         </div>
         <div class="ord-note hidden" id="kargoNote"></div>
         <table class="ord-table kargo-table">
           <thead id="kargoHead"></thead>
           <tbody id="kargoRows"><tr><td class="muted">Yükleniyor…</td></tr></tbody>
         </table>
-      </section>
-      <section class="view hidden" id="view-adres">
-        <div class="ord-toolbar">
-          <b class="view-title">Adres hataları</b>
-          <span class="muted small">Bu siparişlerin kargo fişi adres/telefon sorunu yüzünden alınamıyor. Shopify'da (ya da Geliver'de) düzeltin; düzelince listeden kendiliğinden düşer.</span>
-          <span class="grow"></span>
-          <button class="btn small" id="btnAdresRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button>
-        </div>
+    </section>
+
+    <section class="view hidden" id="view-adres">
+      <header class="page-head">
+          <div class="page-icon red"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><path d="M12 7v4M12 14h.01"/></svg></div>
+          <div class="page-titles"><h1>Adres hataları</h1><p>Bu siparişlerin kargo fişi adres ya da telefon sorunu yüzünden alınamıyor. Shopify’da düzeltin; düzelince listeden kendiliğinden düşer.</p></div>
+          <div class="page-actions"><button class="btn" id="btnAdresRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button></div>
+        </header>
         <table class="ord-table">
           <thead><tr><th>Sipariş</th><th>Kargo</th><th>Müşteri</th><th>Adres</th><th>Sorun</th><th></th></tr></thead>
           <tbody id="adresRows"><tr><td colspan="6" class="muted">Yükleniyor…</td></tr></tbody>
         </table>
-      </section>
-      <section class="view hidden" id="view-sheets">
-        <div class="sheet-grid" id="sheets"></div>
-      </section>
-    </div>
+    </section>
   </main>
 
-  <!-- Panel yuvasi -->
-  <aside class="dock">
-    <div class="panel">
-      <div class="panel-tabs"><span class="ptab active">Siparişler<span class="new-dot hidden" title="Yeni sipariş"></span></span><span class="grow"></span><span class="chip unprinted">Basılmadı</span><span class="chip printed">Basıldı</span></div>
-      <div class="panel-sub muted" id="ordersSummary">—</div>
-      <div class="panel-body scroll" id="orders"></div>
-    </div>
-  </aside>
-
-  <!-- Durum cubugu -->
   <footer class="statusbar activity" id="activity">
     <button class="activity-toggle" id="actToggle"><span class="dot"></span><span id="lastLog">Etkinlik</span><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
     <div class="activity-list" id="logList"></div>
   </footer>
 
-  <!-- Islem penceresi -->
   <div class="overlay hidden" id="jobOverlay">
     <div class="dialog job-card">
       <div class="dialog-title" id="jobTitle">Photoshop çalışıyor</div>
@@ -155,7 +153,7 @@
     </div>
   </div>
 
-  <!-- Tercihler -->
+
   <div class="drawer-bg hidden" id="drawerBg"></div>
   <aside class="drawer dialog" id="drawer">
     <div class="dialog-title"><span>Tercihler</span><button class="icon-btn" id="btnCloseSettings" title="Kapat"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>

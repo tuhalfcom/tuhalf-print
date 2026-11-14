@@ -11,6 +11,9 @@ Shopify siparişlerinin baskı dosyalarını indirir, rulo sayfalara dizer, Phot
 
 > İlk kurulumda Photoshop'ta bir sayfayı **Dosya > Yazdır** ile elle bir kez bas (yazıcı: Canon GP-2600S, 609,6 mm rulo, %100 ölçek, üst/alt boşlukları basma). Photoshop bu ayarları hatırlar; Print butonu hep bunları kullanır.
 
+## Ekranlar
+Soldaki tek menü: **Bugün** (günün işleri 1→4 ve uyarılar), **Baskı sırası**, **Hazır sayfalar**, **Siparişler**, **Kargo fişleri**, **Adres hataları**, **Tercihler**. Bir bağlantı eksikse Bugün ekranında kurulum listesi ve “Ayar dosyasını içe aktar” butonu çıkar.
+
 ## Kurallar
 - Sayfa (canvas) her zaman **609,6 x 720,01 mm**. Kenar boşluğu 3 mm. Yan yana ya da üst üste gelen tasarımlar arasında **her zaman en az 1 mm** boşluk bırakılır (ayara 0 yazılsa bile).
 - Siparişler eskiden yeniye dizilir. Tüm ebatlar gerekirse 90° döner. Örneğin tek başına basılan 30x42 yatay yerleşir. Hiç dönmemesi gereken ebat varsa Ayarlar > Baskı'ya yazılır.

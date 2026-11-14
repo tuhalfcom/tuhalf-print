@@ -2,7 +2,7 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—');
-let CFG = null, STATUS = {}, SHEETS = [];
+let CFG = null, STATUS = {}, SHEETS = [], PLAN = null, ORDR = null, PSFOUND = null;
 
 const ICON_EMPTY = '<svg viewBox="0 0 24 24"><path d="M3 7h18M5 7l1 13h12l1-13M9 7V4h6v3"/></svg>';
 
@@ -60,6 +60,7 @@ function orderRow(f) {
 
 async function loadOrders() {
   const r = await window.api.orders();
+  ORDR = r;
   if (!r.exists) {
     $('#orders').innerHTML = `<div class="empty">${ICON_EMPTY}<div>İndirme klasörü bulunamadı</div><code>${esc(r.root || '—')}</code><div class="small" style="margin-top:10px">Ayarlar &gt; Klasörler bölümünden doğru klasörü seçin.</div></div>`;
     $('#ordersSummary').textContent = 'Klasör bulunamadı';
@@ -94,6 +95,8 @@ function paperHtml(sheet, items) {
 let FORCE = false;
 async function loadPlan() {
   const p = await window.api.plan(FORCE);
+  PLAN = p;
+  for (const el of document.querySelectorAll('[data-count="plan"]')) { el.textContent = p.sheets.length; el.classList.toggle('hidden', !p.sheets.length); }
   const heldTxt = p.held && p.held.length ? ` · ${p.held.length} ödeme bekliyor` : '';
   $('#planSummary').textContent = p.count
     ? `${p.placed} baskı → ${p.sheets.length} sayfa` + (p.waiting.length ? ` · ${p.waiting.length} bekliyor` : '') + heldTxt
@@ -129,7 +132,8 @@ async function loadSheets() {
   const unprinted = SHEETS.filter((s) => !s.printedAt);
   $('#btnPrintAll').disabled = !unprinted.length || !!STATUS.job;
   $('#btnPrintAll').lastChild.textContent = unprinted.length ? `Basılmamışları bas (${unprinted.length})` : 'Basılmamışları bas';
-  $('#sheetsCount').textContent = unprinted.length ? `${unprinted.length}/${SHEETS.length}` : SHEETS.length;
+  $('#sheetsCount').textContent = unprinted.length;
+  $('#sheetsCount').classList.toggle('hidden', !unprinted.length);
   $('#sheets').innerHTML = SHEETS.map((s) => {
     const m = s.meta;
     const preview = m ? paperHtml(m, m.items) : '<div class="paper" style="aspect-ratio:610/420"></div>';
@@ -148,7 +152,7 @@ async function loadSheets() {
   }).join('') || `<div class="empty">${ICON_EMPTY}<div>Hazır sayfa yok</div></div>`;
 }
 
-const refreshAll = () => Promise.all([loadOrders(), loadPlan(), loadSheets(), VIEW === 'orders' ? loadOrdersPage(false, true) : null]).catch((e) => toast(e.message, true));
+const refreshAll = () => Promise.all([loadOrders(), loadPlan(), loadSheets(), VIEW === 'orders' ? loadOrdersPage(false, true) : null]).then(() => renderHome()).catch((e) => toast(e.message, true));
 
 // ---------- Etkinlik ----------
 function addLog(e) {
@@ -195,13 +199,15 @@ $('#btnPickCard').onclick = async () => {
   CFG = r.config; fillSettings(CFG); renderCard();
   toast(r.card.wMm ? `Kart yüklendi · ${r.card.wMm} x ${r.card.hMm} mm` : 'Kart yüklendi · ölçüsünü mm olarak girin');
 };
-function setPsFound(p) { $('#psFound').textContent = p ? `Bulundu: ${p}` : 'Photoshop bulunamadı — konumunu seçin.'; }
+function setPsFound(p) { PSFOUND = p || null; $('#psFound').textContent = p ? `Bulundu: ${p}` : 'Photoshop bulunamadı — konumunu seçin.'; }
 function openDrawer(open) { $('#drawer').classList.toggle('open', open); $('#drawerBg').classList.toggle('hidden', !open); }
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],.order,.ord-file');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],.order,.ord-file');
   if (!t) return;
+  if (t.dataset.import) return doImport();
+  if (t.dataset.prefs) { openDrawer(true); setTimeout(() => gotoPref('set-' + t.dataset.prefs), 150); return; }
   if (t.dataset.url) return window.api.openUrl(t.dataset.url);
   if (t.dataset.kprint) return printKargo([t.dataset.kprint]);
   if (t.dataset.kunmark) { await window.api.labelMark([t.dataset.kunmark], false); return loadKargo(false); }
@@ -237,11 +243,13 @@ $('#btnBuild').onclick = async () => {
 };
 
 // ---------- Gorunum (Yerlesim / Sayfalar / Siparisler) ----------
-let VIEW = 'plan';
+let VIEW = 'home';
 function setView(v) {
   VIEW = v;
   for (const el of document.querySelectorAll('.view')) el.classList.toggle('hidden', el.id !== 'view-' + v);
-  for (const el of document.querySelectorAll('.tool[data-view], .doc-tab[data-view]')) el.classList.toggle('active', el.dataset.view === v);
+  for (const el of document.querySelectorAll('.nav-item[data-view]')) el.classList.toggle('active', el.dataset.view === v);
+  document.querySelector('.main').scrollTop = 0;
+  if (v === 'home') renderHome();
   if (v === 'orders') loadOrdersPage(false, true);
   if (v === 'kargo' || v === 'adres') loadKargo(false);
 }
@@ -348,8 +356,13 @@ function renderKargo() {
   if (!KG) return;
   setCounts();
   const notes = [];
-  if (KTAB === 'cod' && KG.codError) notes.push('Kapıda ödeme: ' + KG.codError);
-  if (KTAB === 'geliver' && KG.geliverError) notes.push('Geliver: ' + KG.geliverError);
+  const k = (CFG && CFG.kargo) || {};
+  const needSetup = (KTAB === 'cod' && !k.codKey) || (KTAB === 'geliver' && !k.geliverToken);
+  $('#kargoSetup').classList.toggle('hidden', !needSetup);
+  if (needSetup) $('#kargoSetup').innerHTML = setupHtml(setupChecks().slice(3), KTAB === 'cod' ? 'Kapıda ödeme bağlantısı kurulmamış' : 'Geliver bağlantısı kurulmamış',
+    'Size verilen ayar dosyasını (GIZLI-kargo-ayarlari.json) “İçe aktar” ile açın; anahtarlar kendiliğinden girilir.');
+  if (KTAB === 'cod' && KG.codError && !needSetup) notes.push('Kapıda ödeme: ' + KG.codError);
+  if (KTAB === 'geliver' && KG.geliverError && !needSetup) notes.push('Geliver: ' + KG.geliverError);
   if (KTAB === 'cod' && KG.codTest) notes.push('Etiket sunucusu DENEME modunda: fişler “ÖRNEK” yazılı çıkar, DHL\'e kaydedilmez.');
   $('#kargoNote').classList.toggle('hidden', !notes.length); $('#kargoNote').textContent = notes.join(' · ');
   $('#kargoFilter').querySelector('[data-f=offer]').classList.toggle('hidden', KTAB === 'cod');
@@ -411,7 +424,7 @@ function renderAdres() {
 async function loadKargo(force) {
   const r = await window.api.kargo(force);
   if (r.error) { toast(r.error, true); return; }
-  KG = r; renderKargo();
+  KG = r; renderKargo(); renderHome();
 }
 $('#kargoTabs').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; KTAB = b.dataset.k; KSEL.clear(); for (const x of $('#kargoTabs').children) x.classList.toggle('active', x === b); renderKargo(); };
 $('#kargoFilter').onclick = (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; KFILTER = b.dataset.f; KSEL.clear(); renderKargo(); };
@@ -447,12 +460,7 @@ async function loadPrinters() {
   sel.value = cur;
 }
 $('#btnExport').onclick = async () => { const r = await window.api.settingsExport(); if (r && r.ok) toast('Ayarlar kaydedildi: ' + r.file); };
-$('#btnImport').onclick = async () => {
-  const r = await window.api.settingsImport();
-  if (!r || r.canceled) return;
-  if (r.error) return toast(r.error, true);
-  CFG = r.config; fillSettings(CFG); loadPrinters(); toast('Ayarlar içe aktarıldı'); KG = null; loadKargo(true);
-};
+$('#btnImport').onclick = doImport;
 
 $('#btnResetFiles').onclick = async () => {
   const r = await window.api.resetFiles();
@@ -462,9 +470,78 @@ $('#btnResetFiles').onclick = async () => {
   ORD = { rows: [] };
   refreshAll();
 };
-$('#toolCheck').onclick = () => $('#btnCheck').click();
 $('#toolFolder').onclick = () => CFG && window.api.openPath(CFG.downloadDir);
-$('#toolPrefs').onclick = $('#menuPrefs').onclick = () => openDrawer(true);
+$('#ordMode').onclick = (e) => {
+  const b = e.target.closest('button[data-m]'); if (!b) return;
+  for (const x of $('#ordMode').children) x.classList.toggle('active', x === b);
+  $('#ordTableWrap').classList.toggle('hidden', b.dataset.m !== 'table');
+  $('#ordFilesWrap').classList.toggle('hidden', b.dataset.m !== 'files');
+};
+
+// ---------- Bugun: gunun isleri (infografik) ----------
+const IC = {
+  down: '<svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>',
+  grid: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="11" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="4" rx="1"/><rect x="3" y="16" width="18" height="5" rx="1"/></svg>',
+  print: '<svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg>',
+  box: '<svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><path d="M12 7v4M12 14h.01"/></svg>',
+  card: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+};
+function setupChecks() {
+  const k = (CFG && CFG.kargo) || {};
+  return [
+    { ok: !!(CFG && CFG.shop && CFG.clientId && CFG.clientSecret), label: 'Shopify bağlantısı', fix: 'shop' },
+    { ok: !!(ORDR && ORDR.exists), label: 'İndirme klasörü', fix: 'dirs' },
+    { ok: !!PSFOUND, label: 'Photoshop', fix: 'print' },
+    { ok: !!k.codKey, label: 'Kapıda ödeme (DHL) bağlantısı', fix: 'kargo' },
+    { ok: !!k.geliverToken, label: 'Geliver bağlantısı', fix: 'kargo' },
+    { ok: !!k.printer, label: 'Etiket yazıcısı seçildi', fix: 'kargo' },
+  ];
+}
+function setupHtml(checks, title, text) {
+  return `<h3>${esc(title)}</h3><p>${esc(text)}</p>
+    <div class="checks">${checks.map((c) => `<div class="check-item ${c.ok ? 'ok' : 'no'}"><span class="ci">${c.ok ? '✓' : '!'}</span><span>${esc(c.label)}${c.ok ? '' : ' — eksik'}</span></div>`).join('')}</div>
+    <div class="setup-actions"><button class="btn primary" data-import="1">Ayar dosyasını içe aktar…</button><button class="btn" data-prefs="${esc((checks.find((c) => !c.ok) || {}).fix || 'app')}">Tercihleri aç</button></div>`;
+}
+function renderHome() {
+  const checks = setupChecks();
+  const missing = checks.filter((c) => !c.ok);
+  const sc = $('#setupCard');
+  sc.classList.toggle('hidden', !missing.length);
+  if (missing.length) sc.innerHTML = setupHtml(checks, 'Kurulumu tamamlayın', 'Bazı bağlantılar eksik. En kolayı: diğer bilgisayardan ya da size verilen ayar dosyasını “İçe aktar” ile açmak.');
+  const p = PLAN || { sheets: [], held: [], waiting: [], placed: 0, count: 0 };
+  const unprintedSheets = (SHEETS || []).filter((s) => !s.printedAt).length;
+  const newFiles = (ORDR && ORDR.newCount) || 0;
+  const totalFiles = ORDR ? ORDR.groups.reduce((a, g) => a + g.files.length, 0) : 0;
+  const todoCod = KG ? (KG.cod || []).filter((o) => o.gonderim !== 'FULFILLED' && !o.sorun && !o.printedAt).length : 0;
+  const todoGel = KG ? (KG.geliver || []).filter((x) => x.kind === 'ready' && !x.printedAt && x.status !== 'LABEL_PRINTED').length : 0;
+  const steps = [
+    { n: 1, ic: IC.down, c: 'c-blue', title: 'Siparişler indi', big: newFiles, unit: 'yeni dosya', sub: `Son 7 günde ${totalFiles} dosya. Program her ${CFG ? CFG.intervalMin : '?'} dakikada bir kendisi kontrol eder.`, btn: ['Siparişlere git', 'orders'], todo: false },
+    { n: 2, ic: IC.grid, c: 'c-violet', title: 'Sayfaları hazırla', big: p.sheets.length, unit: 'sayfa', sub: p.placed ? `${p.placed} baskı dizilmeyi bekliyor.` + (p.waiting.length ? ` ${p.waiting.length} tasarım sonraki siparişleri bekliyor.` : '') : 'Dizilecek baskı yok.', btn: ['Baskı sırasını aç', 'plan'], todo: p.sheets.length > 0 },
+    { n: 3, ic: IC.print, c: 'c-green', title: 'Sayfaları bas', big: unprintedSheets, unit: 'sayfa', sub: unprintedSheets ? 'Photoshop’ta kontrol edip Print ile basın.' : 'Bekleyen baskı sayfası yok.', btn: ['Hazır sayfalara git', 'sheets'], todo: unprintedSheets > 0 },
+    { n: 4, ic: IC.box, c: 'c-orange', title: 'Kargo fişlerini bas', big: KG ? todoCod + todoGel : '–', unit: 'fiş', sub: KG ? `Kapıda ödeme ${todoCod} · Geliver ${todoGel}` : 'Kargo bağlantısı kurulunca görünür.', btn: ['Kargo fişlerine git', 'kargo'], todo: todoCod + todoGel > 0 },
+  ];
+  $('#homeFlow').innerHTML = steps.map((st) => `<div class="step ${st.todo ? 'todo' : st.big === 0 ? 'done' : ''}">
+      <div class="step-top"><span class="step-no">${st.big === 0 && !st.todo ? '✓' : st.n}</span><span class="step-title">${esc(st.title)}</span><span class="step-ic ${st.c}">${st.ic}</span></div>
+      <div class="step-big">${esc(st.big)}<small>${esc(st.unit)}</small></div>
+      <div class="step-sub">${esc(st.sub)}</div>
+      <button class="btn${st.todo ? ' primary' : ''}" data-view="${st.btn[1]}">${esc(st.btn[0])}</button>
+    </div>`).join('');
+  const alerts = [];
+  const errs = KG ? (KG.errors || []).length : 0;
+  if (errs) alerts.push({ c: 'red', ic: IC.pin, t: `${errs} siparişte adres hatası`, s: 'Kargo fişi alınamıyor; Shopify’da düzeltin.', btn: ['İncele', 'adres'] });
+  if (p.held && p.held.length) alerts.push({ c: 'red', ic: IC.card, t: `${p.held.length} baskı ödeme bekliyor`, s: 'Havale ödemesi gelmeden basılmaz.', btn: ['Gör', 'plan'] });
+  if (p.waiting && p.waiting.length) alerts.push({ c: 'orange', ic: IC.clock, t: `${p.waiting.length} tasarım sıra bekliyor`, s: 'Tam satır olunca dizilir; acilse “Bekleyenleri de diz”.', btn: ['Gör', 'plan'] });
+  $('#homeAlerts').innerHTML = alerts.map((a) => `<div class="alert ${a.c}"><span class="a-ic c-${a.c}">${a.ic}</span><div><b>${esc(a.t)}</b><span class="muted">${esc(a.s)}</span></div><button class="btn small" data-view="${a.btn[1]}">${esc(a.btn[0])}</button></div>`).join('');
+}
+async function doImport() {
+  const r = await window.api.settingsImport();
+  if (!r || r.canceled) return;
+  if (r.error) return toast(r.error, true);
+  CFG = r.config; fillSettings(CFG); loadPrinters(); toast('Ayarlar içe aktarıldı');
+  KG = null; await loadKargo(true); renderHome();
+}
 
 // ---------- Tercihler gezinme ----------
 function gotoPref(id) {
@@ -556,11 +633,12 @@ window.api.on('refresh', refreshAll);
   document.body.classList.toggle('win', d.status.platform === 'win32');
   $('#ver').textContent = `v${d.status.version}`;
   fillSettings(CFG); setPsFound(d.photoshop); renderCard(); loadPrinters();
-  if (CFG.kargo && (CFG.kargo.geliverToken || CFG.kargo.codKey)) window.api.kargo(false).then((r) => { if (!r.error) { KG = r; setCounts(); } });
+  if (CFG.kargo && (CFG.kargo.geliverToken || CFG.kargo.codKey)) window.api.kargo(false).then((r) => { if (!r.error) { KG = r; setCounts(); renderHome(); } });
+  setView('home');
   UPD = d.update || {}; renderUpdate();
   d.logs.forEach(addLog);
   renderStatus();
   await refreshAll();
-  if (!CFG.shop) openDrawer(true);
+
   setInterval(renderStatus, 30000);
 })();
