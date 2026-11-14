@@ -131,7 +131,12 @@ async function runDownload(cfg, done, log) {
       if (cfg.firstOrderNo > 0 && orderNo < cfg.firstOrderNo) continue;
     }
     const ageMin = (Date.now() - Date.parse(o.createdAt)) / 60000;
-    if (ageMin < cfg.renderWaitMin) { result.pending.push(`#${orderNo} (render bekleniyor)`); continue; }
+    if (ageMin < cfg.renderWaitMin) {
+      const kalan = cfg.renderWaitMin - ageMin;
+      result.pending.push(`#${orderNo} (tasarım dosyası hazırlanıyor, ~${Math.max(1, Math.ceil(kalan))} dk sonra iner)`);
+      result.retryInMs = Math.min(result.retryInMs || Infinity, kalan * 60000 + 30000);
+      continue;
+    }
 
     const items = [];
     let missing = false;
@@ -146,6 +151,7 @@ async function runDownload(cfg, done, log) {
     }
     if (missing) {
       result.pending.push(`#${orderNo} (baskı linki henüz yok)`);
+      result.retryInMs = Math.min(result.retryInMs || Infinity, 3 * 60000);
       if (ageMin >= cfg.missingWarnMin) log('warn', `#${orderNo} siparişinde baskı linki ${Math.round(ageMin)} dakikadır oluşmadı.`);
       continue;
     }

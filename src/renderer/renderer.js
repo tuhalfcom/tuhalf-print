@@ -342,7 +342,19 @@ $('#ordFilter').onclick = (e) => {
   for (const x of $('#ordFilter').children) x.classList.toggle('active', x === b);
   renderOrdersPage();
 };
-$('#btnOrdRefresh').onclick = () => loadOrdersPage(true, true);
+// Siparisler > Yenile: once yeni siparislerin dosyalarini indir, sonra listeyi Shopify'dan tazele
+$('#btnOrdRefresh').onclick = async () => {
+  const b = $('#btnOrdRefresh'); const label = b.lastChild.textContent;
+  b.disabled = true; b.classList.add('busy'); b.lastChild.textContent = 'Yenileniyor…';
+  try {
+    const r = await window.api.checkNow();
+    await loadOrdersPage(true, true);
+    if (r && r.error) toast(r.error, true);
+    else if (r && r.busy) toast('Liste yenilendi · dosya kontrolü zaten sürüyor, bitince inecek');
+    else if (r && r.files && r.files.length) toast(`Liste yenilendi · ${r.files.length} yeni baskı dosyası indi`);
+    else toast('Liste yenilendi · yeni baskı dosyası yok' + (r && r.pending && r.pending.length ? ' · bekleyen: ' + r.pending.join(', ') : ''));
+  } finally { b.disabled = false; b.classList.remove('busy'); b.lastChild.textContent = label; }
+};
 // ---------- Kargo fisleri ----------
 let KG = null, KTAB = 'cod', KFILTER = 'todo';
 const KSEL = new Set();

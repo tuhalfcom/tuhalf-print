@@ -37,12 +37,12 @@ function defaults() {
     shop: '', clientId: '', clientSecret: '', apiVersion: '2026-10',
     downloadDir: path.join(app.getPath('desktop'), 'BASKI'),
     firstOrderNo: 0, lookbackDays: 10, renderWaitMin: 5, missingWarnMin: 120,
-    dayEnd: '18:00', intervalMin: 30, openAtLogin: true,
+    dayEnd: '18:00', intervalMin: 5, openAtLogin: true,
     colorWords: ['Siyah', 'Beyaz', 'Ahsap', 'Naturel', 'Ceviz', 'Gold', 'Altin', 'Gumus', 'Silver', 'Mese'],
     print: { rollWidthMm: 609.6, maxLengthMm: 720.01, marginMm: 3, gapMm: 1, dpi: 300, portraitLocked: [] },
     card: { enabled: true, file: '', wMm: 0, hMm: 0, maxPerSheet: 0 },
     kargo: { geliverToken: '', codUrl: 'https://tuhalf-etiket.tuhalfcom.workers.dev', codKey: '', printer: '', days: 14 },
-    photoshopPath: '', schema: 3,
+    photoshopPath: '', schema: 4,
   };
 }
 
@@ -126,7 +126,8 @@ async function refreshHeld(skip) {
 }
 
 // ---------------- Indirme dongusu ----------------
-const RUN_LIMIT_MS = 15 * 60000;   // bir kontrol bundan uzun surerse takilmis sayilir
+const RUN_LIMIT_MS = 15 * 60000;
+let retryIn = 0;   // bir kontrol bundan uzun surerse takilmis sayilir
 async function checkNow(opts = {}) {
   if (status.running && Date.now() - (status.runStart || 0) < RUN_LIMIT_MS) return { busy: true };
   if (status.running) log('warn', 'Önceki kontrol yanıt vermedi; yeniden başlatılıyor.');
@@ -139,6 +140,7 @@ async function checkNow(opts = {}) {
     const cfg = redo ? { ...config.data, redownloadFrom: redo, lookbackDays: Math.max(120, config.data.lookbackDays || 0) }
       : { ...config.data, ignoreBefore: state.data.resetAt || 0 };
     const r = await runDownload(cfg, done, log);
+    retryIn = r.retryInMs || 0;   // yeni siparisin dosyasi hazir olunca beklemeden tekrar bak
     updatePay(r.payments);
     try { await refreshHeld(new Set((r.payments || []).map((p) => p.no))); } catch (e) { log('warn', 'Ödeme durumu kontrol edilemedi: ' + e.message); }
     state.set({ downloaded: Array.from(done).slice(-5000) });
@@ -164,7 +166,8 @@ async function checkNow(opts = {}) {
 
 function schedule() {
   clearTimeout(timer);
-  const ms = Math.max(5, config.data.intervalMin) * 60000;
+  let ms = Math.max(5, config.data.intervalMin) * 60000;
+  if (retryIn > 0) { ms = Math.min(ms, Math.max(30000, retryIn)); retryIn = 0; }
   status.nextCheck = Date.now() + ms;
   timer = setTimeout(checkNow, ms);
 }
@@ -767,6 +770,12 @@ app.whenReady().then(() => {
       ...(savedSchema < 2 ? { portraitLocked: [] } : {}),
     } });
     log('info', 'Baskı ayarları güncellendi: sayfa 609,6 x 720,01 mm, tasarımlar arası en az 1 mm.');
+  }
+  if (savedSchema < 4) {
+    // Yeni siparisler daha cabuk insin: 30 dk -> 5 dk (elle baska bir deger secildiyse dokunma)
+    const im = Number(config.data.intervalMin) || 30;
+    config.set({ schema: 4, intervalMin: im >= 30 ? 5 : im });
+    if (im >= 30) log('info', 'Sipariş kontrol sıklığı 5 dakikaya indirildi.');
   }
   updater = createUpdater({
     log, send, notify,
