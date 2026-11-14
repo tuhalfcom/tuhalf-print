@@ -40,5 +40,6 @@ contextBridge.exposeInMainWorld('api', {
     if (!s.startsWith('/')) s = '/' + s;
     return 'file://' + encodeURI(s).replace(/#/g, '%23').replace(/\?/g, '%3F');
   },
+  askReply: (id, response) => ipcRenderer.send('ask-reply', id, response),
   on: (ch, fn) => ipcRenderer.on(ch, (_e, d) => fn(d)),
 });

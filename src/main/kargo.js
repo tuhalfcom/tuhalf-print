@@ -55,13 +55,33 @@ function mapShipment(s) {
   };
 }
 
-// Geliver bakiyesi (TL)
+// Geliver bakiyesi (TL). Yanit bicimi kesin bilinmedigi icin esnek okunur; olmazsa organizasyon bilgisine bakilir.
+function pickBalance(d) {
+  if (d == null) return null;
+  if (typeof d === 'number' || (typeof d === 'string' && d.trim() !== '' && Number.isFinite(Number(d)))) return Number(d);
+  if (typeof d !== 'object') return null;
+  for (const key of ['balance', 'availableBalance', 'totalBalance', 'creditBalance', 'amount', 'value']) {
+    if (d[key] != null && Number.isFinite(Number(d[key]))) return Number(d[key]) - (key === 'creditBalance' && Number.isFinite(Number(d.debitBalance)) ? Number(d.debitBalance) : 0);
+  }
+  for (const v of Object.values(d)) if (v && typeof v === 'object') { const n = pickBalance(v); if (n != null) return n; }
+  return null;
+}
 async function geliverBalance(token, fetchFn = fetch) {
-  const j = await getJson(`${GELIVER_API}/user/balance`, { Authorization: 'Bearer ' + token }, fetchFn);
-  const d = j.data;
-  const n = typeof d === 'object' && d ? Number(d.balance ?? d.amount ?? d.creditBalance) : Number(d);
-  if (!Number.isFinite(n)) throw new Error('Bakiye okunamadı');
-  return n;
+  const H = { Authorization: 'Bearer ' + token };
+  let first = null;
+  try {
+    const j = await getJson(`${GELIVER_API}/user/balance`, H, fetchFn);
+    const n = pickBalance(j.data !== undefined ? j.data : j);
+    if (n != null) return n;
+    first = 'yanıt: ' + JSON.stringify(j).slice(0, 120);
+  } catch (e) { first = e.message; }
+  try {
+    const j = await getJson(`${GELIVER_API}/organizations`, H, fetchFn);
+    const org = Array.isArray(j.data) ? j.data[0] : j.data;
+    const n = org ? pickBalance({ creditBalance: org.creditBalance, debitBalance: org.debitBalance, balance: org.balance }) : null;
+    if (n != null) return n;
+  } catch { /* */ }
+  throw new Error('Bakiye okunamadı (' + first + ')');
 }
 async function geliverShipment(token, id, fetchFn = fetch) {
   const j = await getJson(`${GELIVER_API}/shipments/${encodeURIComponent(id)}`, { Authorization: 'Bearer ' + token }, fetchFn);

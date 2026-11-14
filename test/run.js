@@ -140,6 +140,10 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.strictEqual(K.mapShipment({ id: 's2', offers: { list: [{ id: 'x', providerCode: 'ARAS', totalAmount: '99' }] } }).hepsijet, null);
     const f = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ result: true, data: 1795.47 }) });
     assert.strictEqual(await K.geliverBalance('t', f), 1795.47);
+    const f2 = async (u) => ({ ok: true, status: 200, text: async () => JSON.stringify(/balance/.test(u) ? { result: true, data: { balance: '512.30' } } : {}) });
+    assert.strictEqual(await K.geliverBalance('t', f2), 512.3);
+    const f3 = async (u) => ({ ok: !/balance/.test(u), status: /balance/.test(u) ? 404 : 200, text: async () => JSON.stringify(/balance/.test(u) ? {} : { data: [{ creditBalance: 900, debitBalance: 100 }] }) });
+    assert.strictEqual(await K.geliverBalance('t', f3), 800);
   });
   await t('Adres duzeltme (#2187): il yanlis secilmis (Afyon), adreste Fatih Istanbul yaziyor', async () => {
     const r = await A({ name: 'Mustafa Kapçak', address1: 'Alişan Sokak Nişanca Mahallesi Fatih İstanbul', address2: 'No5 daire7', city: 'İstanbul', zip: '034', province: 'Afyonkarahisar', provinceCode: 'TR-03' });

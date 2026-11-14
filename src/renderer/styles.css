@@ -340,9 +340,39 @@ select.days { height: 32px; padding: 0 8px; border: 1px solid var(--line-2); bor
 .carrier .c-txt small.bal { color: #cfd2d8; margin-top: 2px; }
 .carrier .c-txt small.bal b { color: var(--text); }
 .carrier .c-txt small.bal.low, .carrier .c-txt small.bal.low b { color: var(--err, #f0566a); }
-.bal-warn { display: flex; align-items: center; gap: 14px; justify-content: space-between; margin: 8px 0 4px; padding: 10px 14px; border-radius: 10px; background: rgba(240, 86, 106, .12); border: 1px solid rgba(240, 86, 106, .45); }
+.bal-warn-old { display: flex; align-items: center; gap: 14px; justify-content: space-between; margin: 8px 0 4px; padding: 10px 14px; border-radius: 10px; background: rgba(240, 86, 106, .12); border: 1px solid rgba(240, 86, 106, .45); }
 .kargo-table tr.held td { background: rgba(240, 86, 106, .07); }
 .kargo-table tr.held td:first-child { box-shadow: inset 3px 0 0 #f0566a; }
 .warn-text { color: #f58d9b !important; font-weight: 600; }
 .btn.buy { background: #ff6000; border-color: #ff6000; color: #fff; }
 .btn.buy:hover:not(:disabled) { background: #ff7a26; }
+
+/* Geliver bakiye seridi (Geliver sekmesinde daima gorunur) */
+.bal-bar { display: flex; align-items: center; gap: 22px; margin: 10px 0 2px; padding: 12px 16px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.bal-bar .bal-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: rgba(155, 123, 255, .16); color: var(--violet); font-weight: 800; font-size: 18px; flex: none; }
+.bal-bar .bal-txt { display: flex; flex-direction: column; line-height: 1.25; }
+.bal-bar .bal-txt small { color: var(--muted); font-size: 11.5px; }
+.bal-bar .bal-txt b { font-size: 19px; }
+.bal-bar .bal-note { flex: 1; color: var(--muted); font-size: 12.5px; }
+.bal-bar.low { background: rgba(240, 86, 106, .10); border-color: rgba(240, 86, 106, .55); }
+.bal-bar.low .bal-ico { background: rgba(240, 86, 106, .2); color: #ff9aa8; }
+.bal-bar.low .bal-txt b, .bal-bar.low .bal-note b { color: #ff9aa8; }
+.bal-bar.err { border-color: rgba(240, 163, 58, .5); }
+/* Uygulama ici onay penceresi */
+.ask-bg { position: fixed; inset: 0; z-index: 90; background: rgba(8, 9, 12, .62); backdrop-filter: blur(3px); display: grid; place-items: center; animation: askFade .12s ease-out; }
+.ask-bg.hidden { display: none; }
+.ask { width: min(520px, calc(100vw - 48px)); background: #1f2126; border: 1px solid #343842; border-radius: 16px; box-shadow: 0 24px 60px rgba(0, 0, 0, .55); padding: 22px 22px 18px; animation: askPop .14s ease-out; }
+.ask-head { display: flex; gap: 14px; align-items: flex-start; }
+.ask-ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex: none; background: rgba(76, 141, 255, .15); color: var(--accent); }
+.ask-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ask.warning .ask-ico { background: rgba(240, 163, 58, .16); color: #f6c07a; }
+.ask.danger .ask-ico, .ask.error .ask-ico { background: rgba(240, 86, 106, .16); color: #ff9aa8; }
+.ask-title { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.ask-msg { font-size: 16px; font-weight: 600; line-height: 1.4; margin-top: 3px; color: var(--text); }
+.ask-detail { margin: 14px 0 0 56px; padding: 12px 14px; border-radius: 10px; background: #17181c; border: 1px solid #2c2f37; color: #c9ccd3; font-size: 13px; line-height: 1.55; white-space: pre-line; max-height: 46vh; overflow: auto; }
+.ask-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.ask-btns .btn { min-width: 96px; justify-content: center; }
+.btn.danger { background: #e5484d; border-color: #e5484d; color: #fff; }
+.btn.danger:hover:not(:disabled) { background: #f05a5f; }
+@keyframes askFade { from { opacity: 0; } }
+@keyframes askPop { from { transform: translateY(6px) scale(.98); opacity: 0; } }

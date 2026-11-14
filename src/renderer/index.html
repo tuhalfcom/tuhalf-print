@@ -123,10 +123,10 @@
             <span class="c-count"><b id="kcGel">0</b><small>yazdırılacak</small></span>
           </button>
         </div>
-        <div class="bal-warn hidden" id="gelBalWarn"></div>
+        <div class="bal-bar hidden" id="gelBalBar"></div>
         <div class="kargo-sub">
           <div class="tabs-line" id="kargoFilter"><button data-f="todo" class="active">Yazdırılacaklar</button><button data-f="offer">Teklif bekleyen</button><button data-f="all">Tümü / eski fişler</button></div>
-          <select id="kargoDays" class="days" title="Kaç günlük sipariş gösterilsin"><option value="14">Son 14 gün</option><option value="30">Son 30 gün</option><option value="60">Son 60 gün</option><option value="90">Son 90 gün</option></select>
+          <select id="kargoDays" class="days" title="Hangi tarihteki siparişler gösterilsin"><option value="today">Bugün</option><option value="yesterday">Dün</option><option value="3">Son 3 gün</option><option value="7">Son 7 gün</option><option value="14">Son 14 gün</option><option value="30">Son 30 gün</option><option value="60">Son 60 gün</option><option value="90">Son 90 gün</option></select>
           <span class="grow"></span>
           <span class="muted small" id="kargoInfo"></span>
         </div>
@@ -155,6 +155,13 @@
     <div class="activity-list" id="logList"></div>
   </footer>
 
+    <div class="ask-bg hidden" id="askBg">
+    <div class="ask" id="askBox" role="dialog" aria-modal="true">
+      <div class="ask-head"><span class="ask-ico" id="askIco"></span><div class="ask-titles"><div class="ask-title" id="askTitle"></div><div class="ask-msg" id="askMsg"></div></div></div>
+      <div class="ask-detail" id="askDetail"></div>
+      <div class="ask-btns" id="askBtns"></div>
+    </div>
+  </div>
   <div class="overlay hidden" id="jobOverlay">
     <div class="dialog job-card">
       <div class="dialog-title" id="jobTitle">Photoshop çalışıyor</div>

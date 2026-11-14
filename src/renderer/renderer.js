@@ -11,6 +11,36 @@ function toast(msg, isErr) {
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hidden'), 3500);
 }
 
+// ---------- Uygulama ici onay penceresi ----------
+const ASK_ICON = {
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/></svg>',
+  question: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>',
+  warning: '<svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  error: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
+};
+const ASKQ = [];
+function showAsk(a) {
+  if (!$('#askBg').classList.contains('hidden')) { ASKQ.push(a); return; }
+  $('#askBox').className = 'ask ' + (a.danger ? 'danger' : a.type);
+  $('#askIco').innerHTML = ASK_ICON[a.type] || ASK_ICON.info;
+  $('#askTitle').textContent = a.title; $('#askMsg').textContent = a.message;
+  $('#askDetail').textContent = a.detail; $('#askDetail').classList.toggle('hidden', !a.detail);
+  const order = a.buttons.map((t, i) => i);
+  $('#askBtns').innerHTML = order.map((i) => `<button class="btn ${i === a.cancelId ? 'ghost' : a.danger ? 'danger' : 'primary'}" data-ask="${i}">${esc(a.buttons[i])}</button>`).join('');
+  $('#askBg').classList.remove('hidden');
+  const reply = (i) => {
+    $('#askBg').classList.add('hidden'); document.removeEventListener('keydown', key, true);
+    window.api.askReply(a.id, i);
+    if (ASKQ.length) setTimeout(() => showAsk(ASKQ.shift()), 120);
+  };
+  const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); reply(a.cancelId); } else if (e.key === 'Enter' && !a.danger) { e.preventDefault(); reply(a.defaultId); } };
+  document.addEventListener('keydown', key, true);
+  $('#askBtns').onclick = (e) => { const b = e.target.closest('[data-ask]'); if (b) reply(Number(b.dataset.ask)); };
+  $('#askBg').onclick = (e) => { if (e.target.id === 'askBg') reply(a.cancelId); };
+  setTimeout(() => { const d = $(`#askBtns [data-ask="${a.danger ? a.cancelId : a.defaultId}"]`); if (d) d.focus(); }, 30);
+}
+window.api.on('ask', showAsk);
+
 function dayLabel(name) {
   const m = name.match(/^(\d\d)-(\d\d)-(\d\d)/); if (!m) return name;
   const d = new Date(2000 + +m[3], +m[2] - 1, +m[1]);
@@ -378,21 +408,30 @@ const money = (n) => (n == null ? '—' : Number(n).toLocaleString('tr-TR', { mi
 const fmtD = (t) => { if (!t) return '—'; const d = new Date(t); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
 // Secilebilir satir: fisi basilabilen (Geliver: PDF etiketi var; DHL: kayitli ya da henuz gonderilmemis)
 function kSelectable(r) { return KTAB === 'cod' ? !r.sorun && (r.etiketli || r.gonderim !== 'FULFILLED') : !!r.pdfUrl; }
+// Tarih araligi filtresi (Bugun / Dun / Son N gun)
+function inRange(t) {
+  const r = String(((CFG && CFG.kargo) || {}).range || ((CFG && CFG.kargo && CFG.kargo.days) || 14));
+  const x = Date.parse(t); if (!x) return true;
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  if (r === 'today') return x >= d0.getTime();
+  if (r === 'yesterday') return x >= d0.getTime() - 864e5 && x < d0.getTime();
+  return x >= Date.now() - (Number(r) || 14) * 864e5;
+}
 function codRows() {
-  const rows = (KG.cod || []).filter((o) => o.gonderim !== 'FULFILLED' || KFILTER === 'all');
+  const rows = (KG.cod || []).filter((o) => inRange(o.tarih) && (o.gonderim !== 'FULFILLED' || KFILTER === 'all'));
   if (KFILTER === 'todo') return rows.filter((o) => !o.sorun && !o.printedAt);
   if (KFILTER === 'offer') return [];
   return rows;
 }
 function gelRows() {
-  const rows = KG.geliver || [];
+  const rows = (KG.geliver || []).filter((r) => inRange(r.createdAt));
   if (KFILTER === 'todo') return rows.filter((s) => s.kind === 'ready' && !s.printedAt && s.status !== 'LABEL_PRINTED');
   if (KFILTER === 'offer') return rows.filter((s) => s.kind === 'offer');
   return rows;
 }
 function setCounts() {
-  const todoCod = (KG.cod || []).filter((o) => o.gonderim !== 'FULFILLED' && !o.sorun && !o.printedAt).length;
-  const todoGel = (KG.geliver || []).filter((s) => s.kind === 'ready' && !s.printedAt && s.status !== 'LABEL_PRINTED').length;
+  const todoCod = (KG.cod || []).filter((o) => inRange(o.tarih) && o.gonderim !== 'FULFILLED' && !o.sorun && !o.printedAt).length;
+  const todoGel = (KG.geliver || []).filter((s) => inRange(s.createdAt) && s.kind === 'ready' && !s.printedAt && s.status !== 'LABEL_PRINTED').length;
   $('#kcCod').textContent = todoCod; $('#kcGel').textContent = todoGel;
   const errs = (KG.errors || []).length;
   for (const el of document.querySelectorAll('[data-count="labels"]')) { el.textContent = todoCod + todoGel; el.classList.toggle('hidden', !(todoCod + todoGel)); }
@@ -401,21 +440,39 @@ function setCounts() {
 // Teklif bekleyen Geliver gonderisi: odeme durumu personel icin net olsun
 function offerStatus(r) {
   const p = r.pay;
-  if (p && p.hold) return `<span class="chip err">⚠ ${esc(p.hold)}</span><div class="sub warn-text">Havale gelmeden kargo SATIN ALMAYIN</div>`;
+  if (p && p.hold) {
+    const why = /iptal/i.test(p.hold) ? 'Sipariş iptal — kargo ALMAYIN, Geliver\'deki gönderiyi iptal edin'
+      : /iade/i.test(p.hold) ? 'Ödeme iade edildi — kargo ALMAYIN'
+      : 'Havale gelmeden kargo SATIN ALMAYIN';
+    return `<span class="chip err">⚠ ${esc(p.hold)}</span><div class="sub warn-text">${why}</div>`;
+  }
   if (!p) return `<span class="chip cod">${esc(r.statusText)}</span><div class="sub">Ödeme durumu okunamadı — Shopify'dan kontrol edin</div>`;
   if (!p.paid) return `<span class="chip cod">Ödeme alınmadı</span><div class="sub">Shopify: ${esc(p.financial || '—')} · kargo almayın</div>`;
   return `<span class="chip paid">Ödendi</span><div class="sub">${r.hepsijet ? 'Kargo satın alınabilir' : 'HepsiJet teklifi yok — Geliver\'de açın'}</div>`;
 }
 // Geliver bakiyesi: kartta goster, azalinca uyar
 function renderBalance() {
-  const el = $('#gelBal'), w = $('#gelBalWarn');
-  if (!KG || KG.balance == null) { el.textContent = ''; w.classList.add('hidden'); return; }
-  const n = Math.floor(KG.balance / (KG.avgCost || 167.19));
-  const low = KG.balance < (KG.lowBalance || 500);
+  const el = $('#gelBal'), bar = $('#gelBalBar');
+  const avg = KG && KG.avgCost || 167.19, lim = KG && KG.lowBalance || 500;
+  const show = KG && KTAB === 'geliver' && CFG && CFG.kargo && CFG.kargo.geliverToken;
+  bar.classList.toggle('hidden', !show);
+  if (!KG) return;
+  if (KG.balance == null) {
+    el.textContent = KG.balanceError ? 'Bakiye okunamadı' : '';
+    if (show) { bar.className = 'bal-bar err'; bar.innerHTML = `<span class="bal-ico">₺</span><div class="bal-txt"><b>Geliver bakiyesi okunamadı</b><small>${esc(KG.balanceError || 'Bağlantı yok')}</small></div><button class="btn small" data-url="https://app.geliver.io/payment">Geliver'de gör</button>`; }
+    return;
+  }
+  const n = Math.floor(KG.balance / avg);
+  const low = KG.balance <= lim;
   el.innerHTML = `Bakiye <b>${money(KG.balance)}</b> · ≈${n} kargo`;
   el.classList.toggle('low', low);
-  w.classList.toggle('hidden', !low || KTAB !== 'geliver');
-  if (low) w.innerHTML = `<span>⚠ <b>Geliver bakiyesi azaldı: ${money(KG.balance)}.</b> Mevcut bakiyeyle ortalama <b>${n} kargo</b> gönderilebilir (HepsiJet ort. ${money(KG.avgCost || 167.19)}, KDV dahil).</span><button class="btn small primary" data-url="https://app.geliver.io/payment">Bakiye ekle</button>`;
+  if (!show) return;
+  bar.className = 'bal-bar' + (low ? ' low' : '');
+  bar.innerHTML = `<span class="bal-ico">₺</span>
+    <div class="bal-txt"><small>Geliver bakiyesi</small><b>${money(KG.balance)}</b></div>
+    <div class="bal-txt"><small>Bu bakiyeyle</small><b>≈ ${n} kargo</b></div>
+    <div class="bal-note">${low ? `⚠ <b>Bakiye ${money(lim)} ve altına düştü — bakiye ekleyin.</b> ` : ''}Ortalama HepsiJet kargo ${money(avg)} (KDV dahil). Güncellendi ${fmtTime(KG.at)}.</div>
+    <button class="btn small ${low ? 'primary' : 'ghost'}" data-url="https://app.geliver.io/payment">Bakiye ekle</button>`;
 }
 function renderKargo() {
   if (!KG) return;
@@ -474,7 +531,7 @@ function renderKargo() {
   }).join('') || `<tr><td colspan="8" class="muted">${KFILTER === 'todo' ? 'Yazdırılacak kargo fişi yok.' : 'Gösterilecek gönderi yok.'}</td></tr>`;
   $('#btnKargoPrint').disabled = !KSEL.size;
   $('#btnKargoPrint').lastChild.textContent = KSEL.size ? `Seçilenleri yazdır (${KSEL.size})` : 'Seçilenleri yazdır';
-  $('#kargoDays').value = String(k.days || 14);
+  $('#kargoDays').value = String(k.range || k.days || 14);
   $('#kargoInfo').textContent = KG.at ? `Güncellendi ${fmtTime(KG.at)}` : '';
   renderBalance();
   renderAdres();
@@ -506,7 +563,7 @@ async function loadKargo(force) {
   KG = r; renderKargo(); renderHome();
 }
 $('#kargoTabs').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; KTAB = b.dataset.k; KSEL.clear(); for (const x of $('#kargoTabs').children) x.classList.toggle('active', x === b); renderKargo(); };
-$('#kargoDays').onchange = async (e) => { await window.api.kargoDays(Number(e.target.value)); if (CFG && CFG.kargo) CFG.kargo.days = Number(e.target.value); KSEL.clear(); loadKargo(true); };
+$('#kargoDays').onchange = async (e) => { const v = e.target.value; await window.api.kargoDays(v); if (CFG) CFG.kargo = { ...(CFG.kargo || {}), range: v, days: ({ today: 1, yesterday: 2 })[v] || Number(v) || 14 }; KSEL.clear(); renderKargo(); loadKargo(true); };
 $('#kargoFilter').onclick = (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; KFILTER = b.dataset.f; KSEL.clear(); renderKargo(); };
 async function refreshKargoBtn(b) {
   const label = b.lastChild.textContent;

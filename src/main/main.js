@@ -125,6 +125,21 @@ async function refreshHeld(skip) {
   if (nos.size) updatePay(await fetchPayStatuses(config.data, Array.from(nos)));
 }
 
+// ---------------- Uygulama ici onay penceresi (Windows kutusu yerine kendi tasarimimiz) ----------------
+let askSeq = 0;
+const askWait = new Map();
+function ask(o) {
+  if (!win || win.isDestroyed()) return dialog.showMessageBox(o);
+  const id = ++askSeq;
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+  return new Promise((resolve) => {
+    askWait.set(id, resolve);
+    win.webContents.send('ask', { id, type: o.type || 'info', title: o.title || '', message: o.message || '', detail: o.detail || '', buttons: o.buttons || ['Tamam'], defaultId: o.defaultId ?? 0, cancelId: o.cancelId ?? 0, danger: !!o.danger });
+  });
+}
+ipcMain.on('ask-reply', (_e, id, response) => { const r = askWait.get(id); if (r) { askWait.delete(id); r({ response }); } });
+
 // ---------------- Indirme dongusu ----------------
 const RUN_LIMIT_MS = 15 * 60000;
 let retryIn = 0;   // bir kontrol bundan uzun surerse takilmis sayilir
@@ -395,6 +410,7 @@ const shopAdminOrder = (gid) => {
   const store = String(config.data.shop || '').replace(/\.myshopify\.com.*$/, '').replace(/^https?:\/\//, '');
   return id && store ? `https://admin.shopify.com/store/${store}/orders/${id}` : null;
 };
+let lastBalErr = 0;
 async function loadKargo(force) {
   if (!force && kargoCache && Date.now() - kargoCache.at < 60000) return kargoCache.data;
   const k = config.data.kargo || {};
@@ -403,6 +419,8 @@ async function loadKargo(force) {
   const out = { cod: [], geliver: [], errors: [], codError: null, geliverError: null, codTest: false, at: Date.now() };
   const [g, c, b] = await Promise.allSettled([K.geliverShipments(k.geliverToken, k.days || 14), K.codOrders(k, k.days || 14), k.geliverToken ? K.geliverBalance(k.geliverToken) : Promise.reject(new Error('-'))]);
   out.balance = b.status === 'fulfilled' ? b.value : null;
+  out.balanceError = b.status === 'rejected' && k.geliverToken ? b.reason.message : null;
+  if (out.balanceError && (!lastBalErr || Date.now() - lastBalErr > 30 * 60000)) { lastBalErr = Date.now(); log('warn', 'Geliver bakiyesi okunamadı: ' + out.balanceError); }
   out.avgCost = Number(k.avgCost) || 167.19;   // HepsiJet ortalama kargo (KDV dahil)
   out.lowBalance = Number(k.lowBalance) || 500;
   // Kapida odeme
@@ -500,7 +518,7 @@ ipcMain.handle('geliver-sync', async (_e, shipmentId) => {
     const r = await K.toGeliverAddress(k.geliverToken, e.shopAddr);
     if (r.error) return { error: r.error };
     const A = r.address;
-    const ok = await dialog.showMessageBox(win, {
+    const ok = await ask({
       type: r.note ? 'warning' : 'question', title: `#${e.no} adresini Geliver'e aktar`, noLink: true, defaultId: 1, cancelId: 0,
       buttons: ['İptal', 'Geliver\'e aktar'],
       message: `Geliver'deki gönderiye şu adres yazılacak:`,
@@ -574,7 +592,7 @@ ipcMain.handle('labels-open', async (_e, kind, ids = []) => {
       const rows = data.cod.filter((r) => ids.includes(r.id));
       const yeni = rows.filter((r) => !r.etiketli);
       if (yeni.length && !data.codTest) {
-        const c = await dialog.showMessageBox(win, {
+        const c = await ask({
           type: 'question', title: 'DHL kaydı', noLink: true, defaultId: 1, cancelId: 0, buttons: ['İptal', 'Kaydet ve fişleri göster'],
           message: `${yeni.length} sipariş DHL'e yeni kargo olarak kaydedilecek.`,
           detail: `${yeni.map((r) => '#' + r.no).join(', ')}\n\nDHL'e daha önce kaydedilmiş siparişlerin fişi yeni kayıt açmadan tekrar gösterilir.`,
@@ -610,7 +628,7 @@ ipcMain.handle('geliver-buy', async (_e, id) => {
     if (!o) return { error: `${title}: Geliver'de HepsiJet teklifi yok. Gönderiyi Geliver'de açıp teklif alın.` };
     let bal = null; try { bal = await K.geliverBalance(k.geliverToken); } catch { /* */ }
     if (bal != null && bal < o.total) return { error: `Geliver bakiyesi yetersiz: ${tl(bal)} (gereken ${tl(o.total)}). Bakiye ekleyin.` };
-    const c = await dialog.showMessageBox(win, {
+    const c = await ask({
       type: 'question', title: 'HepsiJet ile satın al', noLink: true, defaultId: 1, cancelId: 0, buttons: ['İptal', `Satın al · ${tl(o.total)}`],
       message: `${title} için HepsiJet kargo etiketi satın alınacak.`,
       detail: `Tutar: ${tl(o.total)} (Geliver bakiyesinden düşer)${bal != null ? `\nBakiye: ${tl(bal)} → ${tl(bal - o.total)}` : ''}\nAlıcı: ${s.name} — ${[s.district, s.city].filter(Boolean).join(' / ')}\nÖdeme: Shopify'da ödendi ✓`,
@@ -646,7 +664,13 @@ ipcMain.handle('labels-print', async (_e, o) => {
     return { ok: true };
   } catch (e) { log('error', `Kargo fişi yazdırılamadı (${printer || 'varsayılan'}): ${e.message}`); return { error: e.message }; }
 });
-ipcMain.handle('kargo-days', (_e, d) => { config.set({ kargo: { ...(config.data.kargo || {}), days: Number(d) || 14 } }); kargoCache = null; return true; });
+// Tarih araligi: today | yesterday | 3 | 7 | 14 | 30 | 60 | 90 (sunucudan cekilecek gun sayisi buna gore)
+const RANGE_DAYS = { today: 1, yesterday: 2 };
+ipcMain.handle('kargo-days', (_e, d) => {
+  const range = String(d || '14');
+  config.set({ kargo: { ...(config.data.kargo || {}), range, days: RANGE_DAYS[range] || Number(range) || 14 } });
+  kargoCache = null; return true;
+});
 ipcMain.handle('label-mark', (_e, keys, on) => {
   if (on) markLabels(keys);
   else { const p = { ...(state.data.labelsPrinted || {}) }; for (const k of keys) delete p[k]; state.data.labelsPrinted = p; state.save(); kargoCache = null; }
@@ -687,8 +711,8 @@ ipcMain.handle('reset-files', async () => {
   let files = 0;
   const count = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) count(p); else files++; } };
   for (const d of days) try { count(d.path); } catch { /* */ }
-  const r = await dialog.showMessageBox(win, {
-    type: 'warning', title: 'Dosyaları resetle', noLink: true, defaultId: 0, cancelId: 0,
+  const r = await ask({
+    type: 'warning', title: 'Dosyaları resetle', noLink: true, defaultId: 0, cancelId: 0, danger: true,
     buttons: ['İptal', 'Kalıcı olarak sil'],
     message: days.length ? `${days.length} sipariş klasörü ve içindeki ${files} dosya kalıcı olarak silinecek.` : 'Silinecek sipariş klasörü yok. İndirme ve baskı geçmişi sıfırlanacak.',
     detail: `Klasör: ${root}\n${path.basename(root)} klasörünün kendisi silinmez; sadece içindeki sipariş klasörleri (gün-ay-yıl-SIPARISLER) silinir.\nİndirilen dosyalar, dizilmiş kaynaklar ve hazırlanmış PSD sayfaları silinir; indirme ve baskı geçmişi sıfırlanır. Bu işlem geri alınamaz.\n\nSonra Tercihler > Sıfırlama'dan "Yeniden indir" ile istediğin siparişten itibaren temiz başlayabilirsin. O zamana kadar sadece yeni gelen siparişler otomatik iner.`,
