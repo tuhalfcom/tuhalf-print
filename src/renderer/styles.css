@@ -307,3 +307,5 @@ body.mac .titlebar { padding-left: 80px; }
 .toast.error { border-left-color: var(--err); }
 
 @media (max-width: 1200px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } .step:nth-child(2)::after { display: none; } }
+
+.fix-ok { margin-top: 6px; color: #6fdcb2; font-size: 12px; }

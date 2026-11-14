@@ -204,9 +204,16 @@ function openDrawer(open) { $('#drawer').classList.toggle('open', open); $('#dra
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],.order,.ord-file');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],[data-gsync],.order,.ord-file');
   if (!t) return;
   if (t.dataset.import) return doImport();
+  if (t.dataset.gsync) {
+    t.disabled = true; t.textContent = 'Aktarılıyor…';
+    const r = await window.api.geliverSync(t.dataset.gsync);
+    if (r.error) { toast(r.error, true); t.disabled = false; t.textContent = "Geliver'e aktar"; return; }
+    toast(`Adres Geliver'e aktarıldı: ${r.address.districtName} / ${r.address.cityName}`);
+    return loadKargo(true);
+  }
   if (t.dataset.prefs) { openDrawer(true); setTimeout(() => gotoPref('set-' + t.dataset.prefs), 150); return; }
   if (t.dataset.url) return window.api.openUrl(t.dataset.url);
   if (t.dataset.kprint) return printKargo([t.dataset.kprint]);
@@ -412,14 +419,24 @@ function renderKargo() {
 }
 function renderAdres() {
   const rows = KG.errors || [];
-  $('#adresRows').innerHTML = rows.map((e) => `<tr>
+  $('#adresRows').innerHTML = rows.map((e) => {
+    let fix = '', note = '';
+    if (e.geliver) {
+      if (e.canSync) {
+        note = `<div class="fix-ok">✓ Shopify'da düzeltilmiş: ${esc(e.shopText)}</div>`;
+        fix = `<button class="btn primary small" data-gsync="${esc(e.id)}">Geliver'e aktar</button>`;
+      } else if (e.shopText) note = `<div class="sub">Shopify'daki adres de aynı: önce Shopify'da düzeltin, sonra Yenile.</div>`;
+      else if (e.shopNote) note = `<div class="sub">${esc(e.shopNote)}</div>`;
+    }
+    return `<tr>
     <td class="no">#${esc(e.no || '?')}</td>
     <td>${e.source === 'cod' ? '<span class="chip cod">Kapıda ödeme · DHL</span>' : '<span class="chip ship">Geliver</span>'}</td>
     <td>${esc(e.name || '—')}</td>
     <td class="addr">${esc(e.address || '')}${e.city ? `<div class="sub">${esc(e.city)}</div>` : ''}</td>
-    <td><span class="chip err">Adres hatası</span><div class="sub">${esc(e.error)}</div></td>
-    <td><div class="act">${e.link ? `<button class="btn small" data-url="${esc(e.link)}">Shopify'da düzelt</button>` : ''}${e.geliver ? `<button class="btn ghost small" data-url="https://app.geliver.io/shipments">Geliver</button>` : ''}</div></td>
-  </tr>`).join('') || `<tr><td colspan="6" class="muted">${KG.codError && KG.geliverError ? 'Kargo bilgileri alınamadı: ' + esc(KG.codError) : 'Adres hatası olan sipariş yok.'}</td></tr>`;
+    <td><span class="chip err">Adres hatası</span><div class="sub">${esc(e.error)}</div>${note}</td>
+    <td><div class="act">${fix}${e.link ? `<button class="btn small" data-url="${esc(e.link)}">Shopify'da düzelt</button>` : ''}${e.geliver ? `<button class="btn ghost small" data-url="https://app.geliver.io/shipments">Geliver</button>` : ''}</div></td>
+  </tr>`;
+  }).join('') || `<tr><td colspan="6" class="muted">${KG.codError && KG.geliverError ? 'Kargo bilgileri alınamadı: ' + esc(KG.codError) : '✓ Adres hatası olan sipariş yok.'}</td></tr>`;
 }
 async function loadKargo(force) {
   const r = await window.api.kargo(force);
@@ -428,7 +445,14 @@ async function loadKargo(force) {
 }
 $('#kargoTabs').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; KTAB = b.dataset.k; KSEL.clear(); for (const x of $('#kargoTabs').children) x.classList.toggle('active', x === b); renderKargo(); };
 $('#kargoFilter').onclick = (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; KFILTER = b.dataset.f; KSEL.clear(); renderKargo(); };
-$('#btnKargoRefresh').onclick = $('#btnAdresRefresh').onclick = () => loadKargo(true);
+async function refreshKargoBtn(b) {
+  const label = b.lastChild.textContent;
+  b.disabled = true; b.lastChild.textContent = 'Yenileniyor…';
+  try { await loadKargo(true); toast(`Güncellendi · ${(KG && KG.errors ? KG.errors.length : 0)} adres hatası`); }
+  finally { b.disabled = false; b.lastChild.textContent = label; }
+}
+$('#btnKargoRefresh').onclick = () => refreshKargoBtn($('#btnKargoRefresh'));
+$('#btnAdresRefresh').onclick = () => refreshKargoBtn($('#btnAdresRefresh'));
 $('#kargoRows').onchange = $('#kargoHead').onchange = (e) => {
   if (e.target.id === 'kAll') {
     const rows = (KTAB === 'cod' ? codRows() : gelRows()).filter((r) => (KTAB === 'cod' ? !r.sorun && r.gonderim !== 'FULFILLED' : r.kind === 'ready'));

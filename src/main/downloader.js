@@ -263,4 +263,19 @@ async function fetchOrderDetails(cfg, days = 14) {
   };
 }
 
-module.exports = { runDownload, shopHost, fetchOrderDetails, fetchPayStatuses, holdReason, payInfo };
+// Siparislerin guncel teslimat adresi (adres hatasi duzeltmesi icin). gids: Shopify Order GID ya da sayisal id
+const ADDR_QUERY = `query($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { id name phone shippingAddress { name address1 address2 city province provinceCode zip phone } } } }`;
+async function fetchOrderAddresses(cfg, gids) {
+  if (!gids.length || !cfg.shop || !cfg.clientId || !cfg.clientSecret) return {};
+  cfg = { apiVersion: '2025-10', ...cfg };
+  const token = await getToken(cfg);
+  const ids = gids.map((g) => (String(g).startsWith('gid://') ? String(g) : `gid://shopify/Order/${String(g).replace(/\D/g, '')}`));
+  const out = {};
+  for (let i = 0; i < ids.length; i += 50) {
+    const d = await gql(cfg, token, { ids: ids.slice(i, i + 50) }, ADDR_QUERY);
+    for (const o of d.nodes || []) if (o && o.shippingAddress) out[o.id.replace(/\D/g, '')] = { ...o.shippingAddress, phone: o.shippingAddress.phone || o.phone || '' };
+  }
+  return out;
+}
+
+module.exports = { runDownload, shopHost, fetchOrderDetails, fetchPayStatuses, holdReason, payInfo, fetchOrderAddresses };

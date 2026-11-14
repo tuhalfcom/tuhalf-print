@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { JsonStore } = require('./store');
-const { runDownload, fetchOrderDetails, fetchPayStatuses, holdReason } = require('./downloader');
+const { runDownload, fetchOrderDetails, fetchPayStatuses, holdReason, fetchOrderAddresses } = require('./downloader');
 const F = require('./folders');
 const { packAll } = require('./packer');
 const PS = require('./photoshop');
@@ -410,9 +410,25 @@ async function loadKargo(force) {
       const row = { ...s, kind: K.geliverKind(s), printedAt: printed['geliver:' + s.id] || null, admin: shopAdminOrder(s.gid) };
       out.geliver.push(row);
       const err = K.geliverAddressError(s);
-      if (err && row.kind !== 'done') out.errors.push({ source: 'geliver', no: s.no, name: s.name, address: s.address, city: [s.district, s.city].filter(Boolean).join(' / '), error: err, link: row.admin, geliver: true, at: s.createdAt });
+      if (err && row.kind !== 'done') out.errors.push({ source: 'geliver', id: s.id, gid: s.gid, no: s.no, name: s.name, address: s.address, city: [s.district, s.city].filter(Boolean).join(' / '), error: err, link: row.admin, geliver: true, at: s.createdAt, row: s });
     }
   } else out.geliverError = g.reason.message;
+  // Geliver adres hatalari: Shopify'daki guncel adres duzeltilmis mi? (Geliver adresi kendiliginden guncellemez)
+  const gErr = out.errors.filter((e) => e.geliver && e.gid);
+  if (gErr.length) {
+    let addrs = {};
+    try { addrs = await fetchOrderAddresses(config.data, gErr.map((e) => e.gid)); } catch { addrs = {}; }
+    const missing = gErr.filter((e) => !addrs[String(e.gid).replace(/\D/g, '')]).map((e) => e.gid);
+    if (missing.length) { try { Object.assign(addrs, await K.codAddresses(k, missing)); } catch { /* */ } }
+    for (const e of gErr) {
+      const a = addrs[String(e.gid).replace(/\D/g, '')];
+      if (!a) { e.shopNote = 'Shopify adresi okunamadı'; continue; }
+      e.shopAddr = a;
+      e.shopText = [[a.address1, a.address2].filter(Boolean).join(' '), [a.city, a.province].filter(Boolean).join(' / ')].filter(Boolean).join(' — ');
+      e.canSync = K.addressChanged(e.row, a);
+    }
+  }
+  for (const e of out.errors) delete e.row;
   out.errors.sort((a, b) => (b.no || 0) - (a.no || 0));
   kargoCache = { at: Date.now(), data: out };
   return out;
@@ -448,6 +464,21 @@ function markLabels(keys) {
   if (kargoCache) for (const r of [...kargoCache.data.cod, ...kargoCache.data.geliver]) { const key = r.id && r.provider !== undefined ? 'geliver:' + r.id : 'cod:' + r.no; if (keys.includes(key)) r.printedAt = now; }
 }
 
+// Shopify'da duzeltilen adresi Geliver gonderisine aktar
+ipcMain.handle('geliver-sync', async (_e, shipmentId) => {
+  const k = config.data.kargo || {};
+  try {
+    const data = await loadKargo(false);
+    const e = data.errors.find((x) => x.id === shipmentId);
+    if (!e || !e.shopAddr) return { error: 'Shopify adresi bulunamadı; Yenile deyip tekrar deneyin.' };
+    const r = await K.toGeliverAddress(k.geliverToken, e.shopAddr);
+    if (r.error) return { error: r.error };
+    const upd = await K.updateGeliverAddress(k.geliverToken, shipmentId, r.address);
+    log('ok', `#${e.no} adresi Geliver'e aktarıldı: ${r.address.districtName} / ${r.address.cityName}`);
+    kargoCache = null;
+    return { ok: true, address: r.address, after: upd };
+  } catch (err) { log('error', `Geliver adresi güncellenemedi: ${err.message}`); return { error: err.message }; }
+});
 ipcMain.handle('kargo', async (_e, force) => {
   try { return await loadKargo(force); } catch (e) { return { error: e.message }; }
 });
