@@ -231,3 +231,58 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .toast.error { border-left-color: var(--err); }
 
 body.mac .appbar { padding-left: 80px; }
+
+/* ---------- Yeni siparis noktasi ---------- */
+.new-dot { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: #3ddc84; box-shadow: 0 0 0 0 rgba(61, 220, 132, .7); animation: glow 1.6s infinite; vertical-align: middle; }
+.tool { position: relative; }
+.tool .new-dot { position: absolute; top: 4px; right: 4px; margin: 0; }
+@keyframes glow { 0% { box-shadow: 0 0 0 0 rgba(61, 220, 132, .7); } 70% { box-shadow: 0 0 0 6px rgba(61, 220, 132, 0); } 100% { box-shadow: 0 0 0 0 rgba(61, 220, 132, 0); } }
+.order-file .new-dot { margin: 0 6px 0 0; }
+
+/* ---------- Siparisler sayfasi ---------- */
+#view-orders { max-width: 1500px; }
+.ord-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ord-toolbar input[type=search] { width: 280px; height: 26px; padding: 0 9px; border: 1px solid #111; border-radius: 3px; background: var(--input); color: var(--text); font: inherit; outline: none; }
+.ord-toolbar input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.seg { display: inline-flex; flex: none; border: 1px solid #111; border-radius: var(--r); overflow: hidden; }
+.seg button { height: 24px; padding: 0 10px; white-space: nowrap; border: 0; border-right: 1px solid #111; background: #303030; color: #cfcfcf; font: inherit; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button:hover { background: #3a3a3a; }
+.seg button.active { background: var(--accent); color: #fff; }
+.ord-note { margin-bottom: 10px; padding: 7px 10px; border-left: 3px solid var(--warn); background: rgba(230, 134, 25, .1); color: #f2c08a; font-size: 11px; }
+.ord-table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); user-select: text; }
+.ord-table th { position: sticky; top: -28px; z-index: 1; text-align: left; font-weight: 600; font-size: 11px; color: #bdbdbd; background: #262626; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ord-table td { padding: 7px 10px; border-bottom: 1px solid #262626; vertical-align: top; }
+.ord-table tr:hover td { background: #303030; }
+.ord-table .num { text-align: right; white-space: nowrap; }
+.ord-table .no { font-weight: 700; color: #fff; white-space: nowrap; }
+.ord-table .sub { color: var(--muted); font-size: 11px; }
+.ord-table tr.cancelled td { opacity: .5; text-decoration: line-through; }
+.ord-files { display: flex; flex-direction: column; gap: 3px; }
+.ord-file { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+.ord-file:hover .fname { color: var(--accent-2); }
+.ord-file .fname { font-size: 11px; color: #d6d6d6; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip.cod { background: rgba(230, 134, 25, .18); color: #f2a65a; }
+.chip.paid { background: rgba(45, 157, 120, .2); color: #6fd3aa; }
+.chip.pending { background: #3d3d3d; color: #cfcfcf; }
+.chip.refund { background: rgba(227, 72, 80, .2); color: #ff8a8f; }
+.chip.ship { background: rgba(55, 142, 240, .16); color: #8cc0ff; }
+.chip.partial { background: rgba(55, 142, 240, .16); color: #8cc0ff; }
+
+/* ---------- Tehlikeli islem ---------- */
+.reset-box.danger { border-color: rgba(227, 72, 80, .45); }
+.reset-box.danger p { margin: 6px 0 10px; }
+.btn.danger { background: rgba(227, 72, 80, .15); border-color: rgba(227, 72, 80, .6); color: #ff9da2; }
+.btn.danger:hover:not(:disabled) { background: rgba(227, 72, 80, .28); border-color: var(--err); }
+
+/* Windows: pencere dugmeleri uygulama cubugunun sagina gelir */
+body.win .appbar { padding-right: 150px; }
+
+/* ---------- Odeme bekleniyor ---------- */
+.chip.hold { background: rgba(227, 72, 80, .18); color: #ff9da2; }
+.waiting.held { border-color: rgba(227, 72, 80, .45); }
+.waiting.held b { color: #ff9da2; }
+.tag.hold { background: rgba(227, 72, 80, .16); color: #ffb3b7; }
+
+#ordInfo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ord-toolbar input[type=search] { flex: 0 1 280px; min-width: 160px; }

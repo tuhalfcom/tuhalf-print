@@ -43,14 +43,15 @@ function orderRow(f) {
   const i = f.info || {};
   const img = f.thumb ? `style="background-image:url('${window.api.fileUrl(f.thumb)}')"` : '';
   const where = f.sheets && f.sheets.length ? f.sheets.map((x) => x.name).join(', ')
-    : f.partial ? f.partial : f.waiting ? 'Bekliyor · sonraki dizilimde' : f.status === 'pending' ? 'Sırada' : 'Dizildi';
+    : f.hold ? f.hold : f.partial ? f.partial : f.waiting ? 'Bekliyor · sonraki dizilimde' : f.status === 'pending' ? 'Sırada' : 'Dizildi';
   const chip = f.printed
     ? `<span class="chip printed">Basıldı${f.printedAt ? ' ' + fmtTime(f.printedAt) : ''}</span>`
+    : f.hold ? `<span class="chip hold" title="${esc(f.hold)}">${/iptal|iade/i.test(f.hold) ? 'Basılmayacak' : 'Ödeme bekleniyor'}</span>`
     : '<span class="chip unprinted">Basılmadı</span>';
   return `<div class="order ${f.status}${f.printed ? ' is-printed' : ''}" data-path="${esc(f.path)}" title="Klasörde göster">
     <div class="thumb" ${img}></div>
     <div>
-      <div class="order-file">${esc(f.name)}</div>
+      <div class="order-file">${f.isNew ? '<span class="new-dot" title="Yeni"></span>' : ''}${esc(f.name)}</div>
       <div class="order-meta">${i.size ? `<span class="tag">${esc(i.size)}</span>` : ''}${i.color ? `<span class="tag">${esc(i.color)}</span>` : ''}${i.qty > 1 ? `<span class="tag">${i.qty} adet</span>` : ''}</div>
     </div>
     <div class="order-right">${chip}<span class="muted small">${esc(where)}</span></div>
@@ -71,7 +72,8 @@ async function loadOrders() {
     return `<div class="day"><div class="day-head"><b>${esc(dayLabel(g.name))}</b><button data-open="${esc(g.path)}">Klasörü aç ↗</button></div>${rows || '<p class="muted small">Dosya yok</p>'}</div>`;
   }).join('');
   $('#orders').innerHTML = html || `<div class="empty">${ICON_EMPTY}<div>Henüz indirilen sipariş yok</div><code>${esc(r.root)}</code></div>`;
-  $('#ordersSummary').textContent = total ? `${total} dosya · ${unprinted} basılmadı · son 7 gün` : 'Yeni siparişler otomatik iner';
+  $('#ordersSummary').textContent = total ? `${total} dosya · ${unprinted} basılmadı` + (r.newCount ? ` · ${r.newCount} yeni` : '') + ' · son 7 gün' : 'Yeni siparişler otomatik iner';
+  setNewDots(r.newCount || 0);
 }
 
 // ---------- Yerlesim ----------
@@ -92,9 +94,13 @@ function paperHtml(sheet, items) {
 let FORCE = false;
 async function loadPlan() {
   const p = await window.api.plan(FORCE);
+  const heldTxt = p.held && p.held.length ? ` · ${p.held.length} ödeme bekliyor` : '';
   $('#planSummary').textContent = p.count
-    ? `${p.placed} baskı → ${p.sheets.length} sayfa` + (p.waiting.length ? ` · ${p.waiting.length} bekliyor` : '')
-    : 'Dizilecek dosya yok';
+    ? `${p.placed} baskı → ${p.sheets.length} sayfa` + (p.waiting.length ? ` · ${p.waiting.length} bekliyor` : '') + heldTxt
+    : 'Dizilecek dosya yok' + heldTxt;
+  $('#heldBox').classList.toggle('hidden', !(p.held && p.held.length));
+  $('#heldTitle').textContent = `Ödeme bekleniyor (${(p.held || []).length})`;
+  $('#heldList').innerHTML = (p.held || []).map((h) => `<span class="tag hold" title="${esc(h.reason)}">${esc(h.name)} · ${esc(h.reason)}</span>`).join('');
   $('#btnBuild').disabled = !p.sheets.length || !!STATUS.job;
   $('#btnBuild').lastChild.textContent = p.sheets.length ? `Sayfaları hazırla (${p.sheets.length})` : 'Sayfaları hazırla';
   const fmt = (n) => String(n).replace('.', ',');
@@ -142,7 +148,7 @@ async function loadSheets() {
   }).join('') || `<div class="empty">${ICON_EMPTY}<div>Hazır sayfa yok</div></div>`;
 }
 
-const refreshAll = () => Promise.all([loadOrders(), loadPlan(), loadSheets()]).catch((e) => toast(e.message, true));
+const refreshAll = () => Promise.all([loadOrders(), loadPlan(), loadSheets(), VIEW === 'orders' ? loadOrdersPage(false, true) : null]).catch((e) => toast(e.message, true));
 
 // ---------- Etkinlik ----------
 function addLog(e) {
@@ -194,7 +200,7 @@ function openDrawer(open) { $('#drawer').classList.toggle('open', open); $('#dra
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],.order');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],.order,.ord-file');
   if (!t) return;
   if (t.dataset.view) return setView(t.dataset.view);
   if (t.dataset.goto) return gotoPref(t.dataset.goto);
@@ -209,7 +215,7 @@ document.addEventListener('click', async (ev) => {
     return;
   }
   if (t.dataset.print) return doPrint([t.dataset.print]);
-  if (t.classList.contains('order')) return window.api.showItem(t.dataset.path);
+  if (t.classList.contains('order') || t.classList.contains('ord-file')) return window.api.showItem(t.dataset.path);
 });
 
 async function doPrint(paths) {
@@ -227,11 +233,96 @@ $('#btnBuild').onclick = async () => {
   FORCE = false;
 };
 
-// ---------- Gorunum (Yerlesim / Sayfalar) ----------
+// ---------- Gorunum (Yerlesim / Sayfalar / Siparisler) ----------
+let VIEW = 'plan';
 function setView(v) {
+  VIEW = v;
   for (const el of document.querySelectorAll('.view')) el.classList.toggle('hidden', el.id !== 'view-' + v);
   for (const el of document.querySelectorAll('.tool[data-view], .doc-tab[data-view]')) el.classList.toggle('active', el.dataset.view === v);
+  if (v === 'orders') loadOrdersPage(false, true);
 }
+function setNewDots(n) {
+  for (const el of document.querySelectorAll('.new-dot[title="Yeni sipariş"]')) el.classList.toggle('hidden', !n);
+}
+
+// ---------- Siparisler sayfasi ----------
+let ORD = { rows: [] }, ORD_FILTER = 'all';
+const FIN = { PAID: 'Ödendi', PENDING: 'Ödenmedi', AUTHORIZED: 'Onaylandı', PARTIALLY_PAID: 'Kısmen ödendi', REFUNDED: 'İade edildi', PARTIALLY_REFUNDED: 'Kısmen iade', VOIDED: 'İptal', EXPIRED: 'Süresi doldu' };
+const FUL = { FULFILLED: 'Gönderildi', UNFULFILLED: 'Gönderilmedi', PARTIALLY_FULFILLED: 'Kısmen gönderildi', IN_PROGRESS: 'Hazırlanıyor', ON_HOLD: 'Beklemede', SCHEDULED: 'Planlandı', OPEN: 'Açık', PENDING_FULFILLMENT: 'Bekliyor', RESTOCKED: 'Stoğa döndü' };
+const isCod = (g) => (g || []).some((x) => /cash on delivery|cod\b|kap[ıi]da/i.test(x));
+function payCell(o) {
+  if (!o.financial) return '<span class="muted">—</span>';
+  const cod = isCod(o.gateways), st = FIN[o.financial] || o.financial;
+  const cls = /REFUND|VOID/.test(o.financial) ? 'refund' : o.financial === 'PAID' ? 'paid' : cod ? 'cod' : 'pending';
+  const label = cod && o.financial === 'PENDING' ? 'Kapıda ödeme' : st;
+  const sub = cod ? (o.financial === 'PENDING' ? 'Teslimatta tahsil' : 'Kapıda ödeme') : (o.gateways || []).join(', ');
+  return `<span class="chip ${cls}">${esc(label)}</span>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}`;
+}
+function printState(o) {
+  const l = o.local;
+  if (!l || !l.files.length) return { key: 'nofile', html: '<span class="muted small">Dosya yok</span>' };
+  const n = l.files.filter((f) => f.printed).length;
+  if (n === l.files.length) return { key: 'printed', html: '<span class="chip printed">Basıldı</span>' };
+  if (o.hold) return { key: 'hold', html: `<span class="chip hold">${/iptal|iade/i.test(o.hold) ? 'Basılmayacak' : 'Ödeme bekleniyor'}</span><div class="sub">${esc(o.hold)}</div>` };
+  const sheets = [...new Set(l.files.flatMap((f) => f.sheets))];
+  return { key: 'unprinted', html: `<span class="chip ${n ? 'partial' : 'unprinted'}">${n ? `Kısmen (${n}/${l.files.length})` : 'Basılmadı'}</span><div class="sub">${sheets.length ? esc(sheets.join(', ')) : 'Sırada'}</div>` };
+}
+function renderOrdersPage() {
+  const q = ($('#ordSearch').value || '').trim().toLocaleLowerCase('tr');
+  const fmtDate = (t) => { if (!t) return '—'; const d = new Date(t); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
+  const money = (o) => (o.total == null ? '—' : o.total.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (o.currency === 'TRY' ? ' ₺' : ' ' + o.currency));
+  const rows = ORD.rows.filter((o) => {
+    const ps = printState(o).key;
+    if (ORD_FILTER !== 'all' && ps !== ORD_FILTER) return false;
+    if (!q) return true;
+    return [String(o.no), o.name, o.city, o.shipping, ...(o.local ? o.local.files.map((f) => f.name) : [])].join(' ').toLocaleLowerCase('tr').includes(q);
+  });
+  $('#ordRows').innerHTML = rows.map((o) => {
+    const ps = printState(o);
+    const files = o.local ? o.local.files.map((f) => `<div class="ord-file" data-path="${esc(f.path)}" title="Klasörde göster">${f.isNew ? '<span class="new-dot" title="Yeni"></span>' : ''}<span class="tag">${esc(f.size || '?')}</span><span class="fname">${esc(f.name)}</span></div>`).join('') : '';
+    const items = !files && o.items && o.items.length ? `<div class="sub">${o.items.map((i) => esc(`${i.qty}× ${i.title}${i.variant ? ' / ' + i.variant : ''}`)).join('<br>')}</div>` : '';
+    return `<tr class="${o.cancelled ? 'cancelled' : ''}">
+      <td class="no">#${o.no}${o.cancelled ? '<div class="sub">İptal</div>' : ''}</td>
+      <td>${fmtDate(o.createdAt)}</td>
+      <td>${o.name ? esc(o.name) : '<span class="muted">—</span>'}${o.city ? `<div class="sub">${esc(o.city)}</div>` : ''}</td>
+      <td>${payCell(o)}</td>
+      <td>${o.shipping ? esc(o.shipping) : '<span class="muted">—</span>'}${o.fulfillment ? `<div class="sub">${esc(FUL[o.fulfillment] || o.fulfillment)}</div>` : ''}</td>
+      <td class="num">${money(o)}</td>
+      <td><div class="ord-files">${files || items || '<span class="muted small">—</span>'}</div></td>
+      <td>${ps.html}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="muted">Gösterilecek sipariş yok.</td></tr>';
+  const cnt = (k) => ORD.rows.filter((o) => printState(o).key === k).length;
+  $('#ordInfo').textContent = `${ORD.rows.length} sipariş · ${cnt('unprinted')} basılmadı · ${cnt('hold')} ödeme bekliyor` + (ORD.fetchedAt ? ` · Shopify ${fmtTime(ORD.fetchedAt)}` : '');
+}
+async function loadOrdersPage(force, markSeen) {
+  if (!ORD.rows.length) $('#ordRows').innerHTML = '<tr><td colspan="8" class="muted">Siparişler yükleniyor…</td></tr>';
+  const r = await window.api.ordersDetail(force);
+  ORD = r;
+  const notes = [];
+  if (r.error) notes.push(r.error);
+  if (r.rows.length && !r.pii) notes.push('Müşteri adı ve şehir için Shopify uygulamasında “korunan müşteri verisi” (ad, adres) izni gerekiyor. İzin verilene kadar bu sütunlar boş kalır.');
+  $('#ordNote').classList.toggle('hidden', !notes.length);
+  $('#ordNote').textContent = notes.join(' ');
+  renderOrdersPage();
+  if (markSeen) { await window.api.ordersSeen(); loadOrders(); }
+}
+$('#ordSearch').oninput = () => renderOrdersPage();
+$('#ordFilter').onclick = (e) => {
+  const b = e.target.closest('button[data-f]'); if (!b) return;
+  ORD_FILTER = b.dataset.f;
+  for (const x of $('#ordFilter').children) x.classList.toggle('active', x === b);
+  renderOrdersPage();
+};
+$('#btnOrdRefresh').onclick = () => loadOrdersPage(true, true);
+$('#btnResetFiles').onclick = async () => {
+  const r = await window.api.resetFiles();
+  if (r.error) return toast(r.error, true);
+  if (r.canceled) return;
+  toast(`Sıfırlandı: ${r.folders} klasör, ${r.files} dosya silindi`);
+  ORD = { rows: [] };
+  refreshAll();
+};
 $('#toolCheck').onclick = () => $('#btnCheck').click();
 $('#toolFolder').onclick = () => CFG && window.api.openPath(CFG.downloadDir);
 $('#toolPrefs').onclick = $('#menuPrefs').onclick = () => openDrawer(true);
@@ -322,6 +413,7 @@ window.api.on('refresh', refreshAll);
   const d = await window.api.init();
   CFG = d.config; STATUS = d.status;
   document.body.classList.toggle('mac', d.status.platform === 'darwin');
+  document.body.classList.toggle('win', d.status.platform === 'win32');
   $('#ver').textContent = `v${d.status.version}`;
   fillSettings(CFG); setPsFound(d.photoshop); renderCard();
   UPD = d.update || {}; renderUpdate();

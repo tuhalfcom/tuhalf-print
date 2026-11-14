@@ -10,7 +10,7 @@ const QUERY = `query($cursor: String, $search: String) {
   orders(first: 50, after: $cursor, query: $search, sortKey: CREATED_AT) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id name createdAt cancelledAt
+      id name createdAt cancelledAt displayFinancialStatus paymentGatewayNames shippingLine { title }
       lineItems(first: 50) { nodes { id title quantity variantTitle customAttributes { key value } } }
     }
   }
@@ -32,12 +32,12 @@ async function getToken(cfg) {
   return j.access_token;
 }
 
-async function gql(cfg, token, variables) {
+async function gql(cfg, token, variables, query = QUERY) {
   for (let i = 1; i <= 5; i++) {
     const res = await fetch(`${base(cfg)}/admin/api/${cfg.apiVersion}/graphql.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
-      body: JSON.stringify({ query: QUERY, variables }),
+      body: JSON.stringify({ query, variables }),
     });
     if (res.status === 429) { await sleep(2000 * i); continue; }
     const j = await res.json().catch(() => ({}));
@@ -45,7 +45,9 @@ async function gql(cfg, token, variables) {
     if (j.errors) {
       const t = JSON.stringify(j.errors);
       if (t.includes('THROTTLED')) { await sleep(2000 * i); continue; }
-      throw new Error('Shopify hatası: ' + t.slice(0, 300));
+      const err = new Error('Shopify hatası: ' + t.slice(0, 300));
+      err.gqlErrors = t;
+      throw err;
     }
     return j.data;
   }
@@ -118,12 +120,14 @@ async function runDownload(cfg, done, log) {
   const redo = Number(cfg.redownloadFrom) > 0 ? Number(cfg.redownloadFrom) : 0;
   result.redo = redo;
   orders.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  result.payments = orders.map(payInfo);   // odeme durumu: havale bekleyen / iptal siparisler basilmaz
   for (const o of orders) {
     const orderNo = parseInt(String(o.name).replace(/\D/g, ''), 10);
     if (o.cancelledAt) continue;
     if (redo) { if (orderNo < redo) continue; }
     else {
       if (done.has(o.id)) continue;
+      if (cfg.ignoreBefore && Date.parse(o.createdAt) < cfg.ignoreBefore) continue;   // resetten onceki siparis
       if (cfg.firstOrderNo > 0 && orderNo < cfg.firstOrderNo) continue;
     }
     const ageMin = (Date.now() - Date.parse(o.createdAt)) / 60000;
@@ -167,4 +171,96 @@ async function runDownload(cfg, done, log) {
   return result;
 }
 
-module.exports = { runDownload, shopHost };
+// ---------- Odeme durumu / baski bekletme ----------
+const isCodText = (g) => /cash on delivery|\bcod\b|kap[ıi]da/i.test(g || '');
+function payInfo(o) {
+  return {
+    no: parseInt(String(o.name).replace(/\D/g, ''), 10), cancelled: !!o.cancelledAt,
+    financial: o.displayFinancialStatus || o.financial || '', gateways: o.paymentGatewayNames || o.gateways || [],
+    shipping: (o.shippingLine && o.shippingLine.title) || o.shipping || '',
+  };
+}
+// Basilmamasi gereken siparis icin sebep, yoksa null.
+// Odeme "bekleniyor" + kargo "Standart" (kapida odeme degil) = havale: para gelmeden kisiye ozel urun basilmaz.
+function holdReason(p) {
+  if (!p) return null;
+  if (p.cancelled) return 'Sipariş iptal edildi';
+  if (['REFUNDED', 'VOIDED'].includes(p.financial)) return 'Ödeme iade edildi';
+  const cod = (p.gateways || []).some(isCodText) || isCodText(p.shipping);
+  const unpaid = ['PENDING', 'PARTIALLY_PAID', 'EXPIRED'].includes(p.financial);
+  const transfer = /standar/i.test(p.shipping) || (p.gateways || []).some((g) => /havale|eft|bank|banka|manual|manuel/i.test(g));
+  if (unpaid && !cod && transfer) return 'Ödeme bekleniyor (havale)';
+  return null;
+}
+// Belirli siparislerin guncel odeme durumunu getirir (bekletilenler yeniden kontrol edilir)
+const STATUS_QUERY = `query($search: String) {
+  orders(first: 100, query: $search) { nodes { name cancelledAt displayFinancialStatus paymentGatewayNames shippingLine { title } } }
+}`;
+async function fetchPayStatuses(cfg, nos) {
+  if (!nos.length || !cfg.shop || !cfg.clientId || !cfg.clientSecret) return [];
+  const token = await getToken(cfg);
+  const out = [];
+  for (let i = 0; i < nos.length; i += 50) {
+    const search = nos.slice(i, i + 50).map((n) => `name:#${n}`).join(' OR ');
+    const d = await gql(cfg, token, { search }, STATUS_QUERY);
+    out.push(...d.orders.nodes.map(payInfo));
+  }
+  return out;
+}
+
+// ---------- Siparisler sayfasi: detayli siparis bilgisi ----------
+const DETAIL_FIELDS = (pii) => `
+  id name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus paymentGatewayNames
+  totalPriceSet { shopMoney { amount currencyCode } }
+  shippingLine { title }
+  ${pii ? 'shippingAddress { name city province } billingAddress { name } customer { displayName }' : ''}
+  lineItems(first: 50) { nodes { title quantity variantTitle } }`;
+const detailQuery = (pii) => `query($cursor: String, $search: String) {
+  orders(first: 100, after: $cursor, query: $search, sortKey: CREATED_AT, reverse: true) {
+    pageInfo { hasNextPage endCursor }
+    nodes { ${DETAIL_FIELDS(pii)} }
+  }
+}`;
+
+// Shopify'dan son N gunun siparislerini ozet bilgileriyle getirir.
+// Musteri adi/sehir "korunan musteri verisi" izni ister; izin yoksa bu alanlar olmadan tekrar dener.
+async function fetchOrderDetails(cfg, days = 14) {
+  if (!cfg.shop || !cfg.clientId || !cfg.clientSecret) throw new Error('Shopify bilgileri eksik.');
+  cfg = { apiVersion: '2025-10', ...cfg };
+  const token = await getToken(cfg);
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  async function all(pii) {
+    const out = [];
+    let cursor = null;
+    for (let page = 0; page < 20; page++) {
+      const d = await gql(cfg, token, { cursor, search: `created_at:>=${since}` }, detailQuery(pii));
+      out.push(...d.orders.nodes);
+      if (!d.orders.pageInfo.hasNextPage) break;
+      cursor = d.orders.pageInfo.endCursor;
+    }
+    return out;
+  }
+  let nodes, pii = true;
+  try { nodes = await all(true); }
+  catch (e) {
+    if (!/ACCESS_DENIED|access denied|not approved|protected customer|Customer object/i.test(e.gqlErrors || e.message)) throw e;
+    pii = false; nodes = await all(false);
+  }
+  return {
+    pii,
+    orders: nodes.map((o) => {
+      const no = parseInt(String(o.name).replace(/\D/g, ''), 10);
+      const name = (o.shippingAddress && o.shippingAddress.name) || (o.billingAddress && o.billingAddress.name) || (o.customer && o.customer.displayName) || '';
+      return {
+        no, name, city: (o.shippingAddress && (o.shippingAddress.city || o.shippingAddress.province)) || '',
+        createdAt: o.createdAt, cancelled: !!o.cancelledAt,
+        financial: o.displayFinancialStatus || '', fulfillment: o.displayFulfillmentStatus || '',
+        gateways: o.paymentGatewayNames || [], shipping: (o.shippingLine && o.shippingLine.title) || '',
+        total: o.totalPriceSet ? Number(o.totalPriceSet.shopMoney.amount) : null, currency: o.totalPriceSet ? o.totalPriceSet.shopMoney.currencyCode : '',
+        items: (o.lineItems.nodes || []).map((l) => ({ title: l.title, variant: l.variantTitle || '', qty: l.quantity })),
+      };
+    }),
+  };
+}
+
+module.exports = { runDownload, shopHost, fetchOrderDetails, fetchPayStatuses, holdReason, payInfo };

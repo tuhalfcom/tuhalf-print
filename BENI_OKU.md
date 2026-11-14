@@ -21,13 +21,17 @@ Shopify siparişlerinin baskı dosyalarını indirir, rulo sayfalara dizer, Phot
 - Basılan sayfadaki siparişler, Siparişler listesinde yeşil **Basıldı** olur. Photoshop'tan elle basılan sayfa, sayfa kartındaki **Basıldı** butonuyla işaretlenir.
 - 18:00'den sonra inenler ertesi günün klasörüne yazılır.
 - **Hazır sayfalar**'da her sayfa için **Photoshop'ta aç** butonu PSD'yi doğrudan Photoshop'ta açar.
+- **Ödemesi beklenen havale siparişleri basılmaz.** Shopify'da ödeme durumu “Ödenmedi”, kargo “Standart” ve ödeme yöntemi kapıda ödeme değilse sipariş havale sayılır. Dosyası iner ama dizilmez, “Ödeme bekleniyor” alanında durur, “Bekleyenleri de diz” ile de basılmaz. Operatör Shopify'da siparişi “Ödendi” yapınca bir sonraki kontrolde (veya **Şimdi kontrol et** ile) baskı sırasına girer. İptal ya da iade edilen siparişler de basılmaz. Böyle bir sipariş hazırlanmış bir sayfadaysa o sayfa Print ile basılmaz, uyarı verilir.
+- **Siparişler sayfası** (üst menü > Siparişler): son 14 günün siparişleri; müşteri, şehir, ödeme durumu (kapıda ödeme / havale), kargo yöntemi ve durumu, tutar, baskı dosyaları ve baskı durumu. Arama ve filtre var. Müşteri adı için Shopify uygulamasında “korunan müşteri verisi” izni gerekir; izin yoksa o sütun boş kalır.
+- Yeni sipariş inince **Siparişler** menüsünde ve panelde yeşil nokta yanar; Siparişler sayfası açılınca söner.
+- **Dosyaları resetle** (Tercihler > Sıfırlama): programın oluşturduğu sipariş klasörlerini (indirilenler, _Dizildi, _Sayfalar) onay sorduktan sonra **kalıcı olarak siler**, indirme ve baskı geçmişini sıfırlar. Sonrasında eski siparişler otomatik inmez; **Yeniden indir** ile istenen siparişten itibaren temiz başlanır.
 - **Yeni bilgisayara kurulum / sıfırlama:** Tercihler > Sıfırlama'da sipariş numarasını girip **Yeniden indir** de. O sipariş ve sonrasındaki baskı dosyaları tekrar iner (son 120 gün). Klasörde zaten olan dosyalar tekrar inmez.
 - Klasörler: `Masaüstü\BASKI\GG-AA-YY-SIPARISLER\`: `_Dizildi` (dizilen kaynaklar), `_Sayfalar` (PSD sayfalar).
 
 ## Derleme (geliştirici)
 ```
 npm install
-npm test            # 18 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
+npm test            # 29 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
 npm start           # geliştirme modunda aç
 npm run dist:win    # dist/Tuhalf-Print-Kurulum-1.1.0.exe
 npm run dist:mac    # dist/Tuhalf-Print-1.1.0-mac.dmg (Mac'te)

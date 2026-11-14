@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { JsonStore } = require('./store');
-const { runDownload } = require('./downloader');
+const { runDownload, fetchOrderDetails, fetchPayStatuses, holdReason } = require('./downloader');
 const F = require('./folders');
 const { packAll } = require('./packer');
 const PS = require('./photoshop');
@@ -92,6 +92,31 @@ function pushStatus() { send('status', publicStatus()); }
 function publicStatus() { return { ...status, platform: process.platform, version: app.getVersion() }; }
 function notify(title, body) { try { if (Notification.isSupported()) new Notification({ title, body, icon: ICON }).show(); } catch { /* */ } }
 
+// ---------------- Odeme durumu (havale bekleyen / iptal siparisler basilmaz) ----------------
+function holdOf(no) { return no ? holdReason((state.data.pay || {})[no]) : null; }
+function updatePay(list) {
+  if (!list || !list.length) return;
+  const pay = { ...(state.data.pay || {}) };
+  const now = Date.now();
+  for (const p of list) {
+    if (!p.no) continue;
+    const before = holdReason(pay[p.no]);
+    pay[p.no] = { cancelled: p.cancelled, financial: p.financial, gateways: p.gateways, shipping: p.shipping, at: now };
+    const after = holdReason(pay[p.no]);
+    if (before && !after) log('ok', `#${p.no} ödemesi onaylandı, baskı sırasına alındı.`);
+  }
+  for (const k of Object.keys(pay)) if (now - pay[k].at > 120 * 864e5) delete pay[k];
+  state.data.pay = pay; state.save();
+}
+// Bekletilen siparislerin guncel durumunu Shopify'dan tekrar sor
+async function refreshHeld(skip) {
+  const root = downloadDir();
+  if (!root || !fs.existsSync(root)) return;
+  const nos = new Set();
+  for (const it of F.pendingItems(root, [], state.data.arranged || {}).items) if (holdOf(it.order) && !(skip && skip.has(it.order))) nos.add(it.order);
+  if (nos.size) updatePay(await fetchPayStatuses(config.data, Array.from(nos)));
+}
+
 // ---------------- Indirme dongusu ----------------
 async function checkNow(opts = {}) {
   if (status.running) return { busy: true };
@@ -100,8 +125,11 @@ async function checkNow(opts = {}) {
   try {
     const redo = Number(opts.redownloadFrom) || 0;
     log('info', redo ? `#${redo} ve sonraki siparişler yeniden indiriliyor…` : 'Yeni siparişler kontrol ediliyor…');
-    const cfg = redo ? { ...config.data, redownloadFrom: redo, lookbackDays: Math.max(120, config.data.lookbackDays || 0) } : config.data;
+    const cfg = redo ? { ...config.data, redownloadFrom: redo, lookbackDays: Math.max(120, config.data.lookbackDays || 0) }
+      : { ...config.data, ignoreBefore: state.data.resetAt || 0 };
     const r = await runDownload(cfg, done, log);
+    updatePay(r.payments);
+    try { await refreshHeld(new Set((r.payments || []).map((p) => p.no))); } catch (e) { log('warn', 'Ödeme durumu kontrol edilemedi: ' + e.message); }
     state.set({ downloaded: Array.from(done).slice(-5000) });
     if (redo) {
       log('ok', `Yeniden indirme bitti: ${r.files.length} dosya indi` + (r.skipped ? `, ${r.skipped} dosya zaten vardı` : '') + (r.files.length ? ` → ${r.folderName}` : '') + '.');
@@ -109,7 +137,9 @@ async function checkNow(opts = {}) {
     } else
     log(r.files.length ? 'ok' : 'info', r.files.length ? `${r.files.length} dosya indi → ${r.folderName}` : 'Yeni baskı dosyası yok.');
     if (r.pending.length) log('info', 'Bekleyen: ' + r.pending.join(', '));
-    if (r.files.length) { notify('Tuhalf Print', `${r.files.length} yeni baskı dosyası indi`); send('refresh'); }
+    if (r.files.length) notify('Tuhalf Print', `${r.files.length} yeni baskı dosyası indi`);
+    detailCache = null;
+    send('refresh');   // odeme durumu degismis olabilir: yeni dosya olmasa da ekranlari yenile
     return r;
   } catch (e) {
     status.lastError = e.message; log('error', e.message);
@@ -144,7 +174,10 @@ function packCfg() {
   return { width: +p.rollWidthMm, maxLength: +p.maxLengthMm, margin: +p.marginMm, gap: Math.max(1, +p.gapMm || 0), card: cardCfg() };
 }
 function plan(force) {
-  const { items, bad, newestFolder } = F.pendingItems(downloadDir(), config.data.print.portraitLocked, state.data.arranged || {});
+  const all = F.pendingItems(downloadDir(), config.data.print.portraitLocked, state.data.arranged || {});
+  const { bad, newestFolder } = all;
+  const held = [], items = [];
+  for (const it of all.items) { const h = holdOf(it.order); if (h) held.push({ name: it.name, fileName: it.fileName, order: it.order, reason: h }); else items.push(it); }
   const res = packAll(items, packCfg(), { force: !!force });
   const sheets = res.sheets.map((s) => ({
     widthMm: s.width, lengthMm: s.length, cards: s.cards || 0,
@@ -154,7 +187,7 @@ function plan(force) {
   }));
   return {
     sheets, skipped: res.skipped.map((i) => i.name), waiting: res.waiting.map((i) => i.name), waitingFiles: res.waiting.map((i) => i.fileName), bad, newestFolder,
-    count: items.length, placed: sheets.reduce((a, s) => a + s.items.filter((i) => !i.card).length, 0), force: !!force,
+    held, count: items.length, placed: sheets.reduce((a, s) => a + s.items.filter((i) => !i.card).length, 0), force: !!force,
   };
 }
 
@@ -211,6 +244,15 @@ async function buildSheets(force) {
 
 async function printSheets(paths) {
   if (status.job) throw new Error('Başka bir işlem sürüyor.');
+  // Sayfa hazirlandiktan sonra iptal edilen / odemesi geri cekilen siparis varsa o sayfa basilmaz
+  paths = paths.filter((p) => {
+    let meta = null;
+    try { meta = JSON.parse(fs.readFileSync(p.replace(/\.psd$/i, '.json'), 'utf8')); } catch { return true; }
+    const bad = [...new Set((meta.items || []).filter((i) => !i.card && holdOf(Number(i.order))).map((i) => `#${i.order} (${holdOf(Number(i.order))})`))];
+    if (bad.length) log('warn', `${path.basename(p)} basılmadı: ${bad.join(', ')}. Sayfayı Photoshop'ta düzeltip elle basabilirsiniz.`);
+    return !bad.length;
+  });
+  if (!paths.length) return { files: [] };
   status.job = { kind: 'print', done: 0, total: paths.length, label: 'Photoshop başlatılıyor…' }; pushStatus();
   try {
     const res = await PS.runJob(config.data.photoshopPath, JSX('print.jsx'), { files: paths }, (d, t, l) => {
@@ -255,11 +297,15 @@ ipcMain.handle('orders', () => {
   const groups = exists ? F.listOrders(root, 7) : [];
   const idx = F.sheetIndex(root, state.data.printed);
   const arranged = state.data.arranged || {};
+  if (!state.data.ordersSeenAt) { state.data.ordersSeenAt = Date.now(); state.save(); }
+  const seenAt = state.data.ordersSeenAt;
   let waiting = new Set();
   try { if (exists) waiting = new Set(plan(false).waitingFiles); } catch { /* */ }
   for (const g of groups) for (const f of g.files) {
     f.waiting = f.status === 'pending' && waiting.has(f.name);
     f.thumb = thumb(f.path);
+    f.isNew = f.mtime > seenAt;
+    f.hold = f.status === 'pending' ? holdOf(f.info && f.info.order) : null;
     const sh = idx.get(f.name) || [];
     const qty = (f.info && f.info.qty) || 1;
     const allPlaced = f.status === 'arranged';
@@ -268,7 +314,8 @@ ipcMain.handle('orders', () => {
     f.printedAt = f.printed ? Math.max(...sh.map((x) => x.printedAt)) : null;
     f.partial = !allPlaced && (arranged[f.name] || 0) > 0 ? `${arranged[f.name]}/${qty} dizildi` : '';
   }
-  return { root, exists, groups };
+  const newCount = groups.reduce((a, g) => a + g.files.filter((f) => f.isNew).length, 0);
+  return { root, exists, groups, newCount };
 });
 ipcMain.handle('plan', (_e, force) => {
   const p = plan(force);
@@ -285,6 +332,67 @@ ipcMain.handle('sheets', () => {
   });
 });
 ipcMain.handle('check-now', () => checkNow());
+// ---------- Siparisler sayfasi ----------
+let detailCache = null; // { at, data }
+ipcMain.handle('orders-seen', () => { state.data.ordersSeenAt = Date.now(); state.save(); return true; });
+ipcMain.handle('orders-detail', async (_e, force) => {
+  const root = downloadDir();
+  // Yerel dosyalar: siparis no -> dosyalar ve baski durumu
+  const local = new Map();
+  if (root && fs.existsSync(root)) {
+    const idx = F.sheetIndex(root, state.data.printed);
+    for (const g of F.listOrders(root, 30)) for (const f of g.files) {
+      const no = f.info && f.info.order; if (!no) continue;
+      const sh = idx.get(f.name) || [];
+      const printed = f.status === 'arranged' && sh.length > 0 && sh.every((x) => x.printedAt);
+      if (!local.has(no)) local.set(no, { files: [], folder: g.path });
+      local.get(no).files.push({ name: f.name, path: f.path, size: f.info.size, color: f.info.color, qty: f.info.qty, printed, sheets: sh.map((x) => x.sheet), isNew: f.mtime > (state.data.ordersSeenAt || Infinity) });
+    }
+  }
+  let remote = null, error = null, pii = true;
+  const c = config.data;
+  if (c.shop && c.clientId && c.clientSecret) {
+    try {
+      if (force || !detailCache || Date.now() - detailCache.at > 60000) detailCache = { at: Date.now(), data: await fetchOrderDetails(c, 14) };
+      remote = detailCache.data.orders; pii = detailCache.data.pii;
+    } catch (e) { error = e.message; }
+  } else error = 'Shopify bilgileri girilmemiş; sadece indirilen dosyalar gösteriliyor.';
+  const rows = new Map();
+  if (remote) updatePay(remote);
+  for (const o of remote || []) rows.set(o.no, { ...o, hold: holdReason(o), local: local.get(o.no) || null });
+  for (const [no, l] of local) if (!rows.has(no)) rows.set(no, { no, hold: holdOf(no), name: '', createdAt: null, financial: '', fulfillment: '', gateways: [], shipping: '', total: null, currency: '', items: [], local: l, onlyLocal: true });
+  const list = Array.from(rows.values()).sort((a, b) => b.no - a.no);
+  return { rows: list, error, pii, fetchedAt: detailCache ? detailCache.at : null };
+});
+
+// ---------- Sifirlama: programin olusturdugu klasor ve dosyalari kalici sil ----------
+ipcMain.handle('reset-files', async () => {
+  if (status.job || status.running) return { error: 'Şu an bir işlem sürüyor, bitince tekrar deneyin.' };
+  const root = downloadDir();
+  const days = root && fs.existsSync(root) ? F.listDayFolders(root) : [];
+  let files = 0;
+  const count = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) count(p); else files++; } };
+  for (const d of days) try { count(d.path); } catch { /* */ }
+  const r = await dialog.showMessageBox(win, {
+    type: 'warning', title: 'Dosyaları resetle', noLink: true, defaultId: 0, cancelId: 0,
+    buttons: ['İptal', 'Kalıcı olarak sil'],
+    message: days.length ? `${days.length} sipariş klasörü ve içindeki ${files} dosya kalıcı olarak silinecek.` : 'Silinecek sipariş klasörü yok. İndirme ve baskı geçmişi sıfırlanacak.',
+    detail: `Klasör: ${root}\nİndirilen dosyalar, dizilmiş kaynaklar ve hazırlanmış PSD sayfaları silinir; indirme ve baskı geçmişi sıfırlanır. Bu işlem geri alınamaz.\n\nSonra Tercihler > Sıfırlama'dan "Yeniden indir" ile istediğin siparişten itibaren temiz başlayabilirsin. O zamana kadar sadece yeni gelen siparişler otomatik iner.`,
+  });
+  if (r.response !== 1) return { canceled: true };
+  const failed = [];
+  for (const d of days) { try { fs.rmSync(d.path, { recursive: true, force: true }); } catch (e) { failed.push(d.name); } }
+  try { if (fs.existsSync(root) && !fs.readdirSync(root).length) fs.rmdirSync(root); } catch { /* */ }
+  try { fs.rmSync(path.join(app.getPath('userData'), 'thumbs'), { recursive: true, force: true }); } catch { /* */ }
+  state.data.downloaded = []; state.data.arranged = {}; state.data.printed = {};
+  state.data.resetAt = Date.now(); state.data.ordersSeenAt = Date.now();
+  state.save(); detailCache = null;
+  if (failed.length) log('warn', `Bazı klasörler silinemedi (açık olabilir): ${failed.join(', ')}`);
+  log('ok', `Sıfırlandı: ${days.length - failed.length} klasör, ${files} dosya silindi. İndirme ve baskı geçmişi temizlendi.`);
+  send('refresh');
+  return { ok: true, folders: days.length - failed.length, files, failed };
+});
+
 ipcMain.handle('open-in-ps', (_e, p) => {
   if (!p || !fs.existsSync(p)) return { error: 'Dosya bulunamadı.' };
   const exe = PS.findPhotoshop(config.data.photoshopPath);
@@ -352,8 +460,9 @@ ipcMain.handle('pick', async (_e, kind) => {
 function createWindow(show) {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1100, minHeight: 700, show: false,
-    backgroundColor: '#0d0d0f', title: 'Tuhalf Print', icon: ICON,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    backgroundColor: '#1e1e1e', title: 'Tuhalf Print', icon: ICON,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#1e1e1e', symbolColor: '#d6d6d6', height: 34 } } : {}),
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, '..', 'renderer', 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });

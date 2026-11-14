@@ -8,7 +8,7 @@ const http = require('http');
 const N = require('../src/main/naming');
 const F = require('../src/main/folders');
 const { packAll } = require('../src/main/packer');
-const { runDownload } = require('../src/main/downloader');
+const { runDownload, fetchOrderDetails, holdReason } = require('../src/main/downloader');
 
 let pass = 0;
 const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name); };
@@ -69,6 +69,21 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.ok(r.sheets.length > 5); r.sheets.forEach((s) => noOverlap(s, 1));
   });
 
+  console.log('Odeme durumu');
+  await t('Havale: odeme bekleniyor + Standart kargo -> basilmaz', () =>
+    assert.strictEqual(holdReason({ financial: 'PENDING', gateways: ['manual'], shipping: 'Standart' }), 'Ödeme bekleniyor (havale)'));
+  await t('Kapida odeme beklemede olsa da basilir', () => {
+    assert.strictEqual(holdReason({ financial: 'PENDING', gateways: ['Cash on Delivery (COD)'], shipping: 'Kapıda Ödeme' }), null);
+    assert.strictEqual(holdReason({ financial: 'PENDING', gateways: ['Kapıda Ödeme'], shipping: 'Standart' }), null);
+  });
+  await t('Havale odemesi gelince (Odendi) basilir', () =>
+    assert.strictEqual(holdReason({ financial: 'PAID', gateways: ['manual'], shipping: 'Standart' }), null));
+  await t('Iptal / iade edilen siparis basilmaz', () => {
+    assert.ok(holdReason({ cancelled: true, financial: 'PAID' }));
+    assert.ok(holdReason({ financial: 'REFUNDED', shipping: 'Standart' }));
+  });
+  await t('Durumu bilinmeyen siparis engellenmez', () => assert.strictEqual(holdReason(undefined), null));
+
   console.log('Klasorler');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-'));
   await t('Mesai sonrasi ertesi gun', () => {
@@ -101,7 +116,7 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
   const old = new Date(Date.now() - 3600e3).toISOString();
   const fresh = new Date().toISOString();
   const orders = [
-    { id: 'gid://1', name: '#2266', createdAt: old, cancelledAt: null, lineItems: { nodes: [
+    { id: 'gid://1', name: '#2266', createdAt: old, cancelledAt: null, displayFinancialStatus: 'PENDING', paymentGatewayNames: ['Cash on Delivery (COD)'], shippingLine: { title: 'DHL eCommerce' }, shippingAddress: { name: 'Ali Veli', city: 'İstanbul' }, totalPriceSet: { shopMoney: { amount: '749.90', currencyCode: 'TRY' } }, lineItems: { nodes: [
       { id: 'l1', title: 'Forma Tablo', quantity: 1, variantTitle: 'Çerçeveli Poster / Siyah / 30x42 cm',
         customAttributes: [{ key: '_customization_id', value: 'a' }, { key: '_tib_design_link_1', value: 'URL/a.png' }] }] } },
     { id: 'gid://2', name: '#2267', createdAt: old, cancelledAt: null, lineItems: { nodes: [
@@ -118,8 +133,10 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
       if (req.url === '/admin/oauth/access_token') { res.end(JSON.stringify({ access_token: 'tok' })); return; }
       if (req.url.endsWith('/graphql.json')) {
         assert.strictEqual(req.headers['x-shopify-access-token'], 'tok');
+        if (global.DENY_PII && body.includes('shippingAddress')) { res.end(JSON.stringify({ errors: [{ message: 'This app is not approved to access the Customer object.', extensions: { code: 'ACCESS_DENIED' } }] })); return; }
         const host = `http://127.0.0.1:${srv.address().port}`;
         const data = JSON.parse(JSON.stringify(orders).replace(/URL/g, host + '/f'));
+        if (!body.includes('shippingAddress')) data.forEach((o) => delete o.shippingAddress);
         res.end(JSON.stringify({ data: { orders: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: data } } })); return;
       }
       if (req.url.startsWith('/f/')) { res.setHeader('content-type', 'image/png'); res.end(PNG); return; }
@@ -140,6 +157,19 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
   });
   const r2 = await runDownload(conf, done, () => {});
   await t('Ikinci calismada tekrar indirmez', () => assert.strictEqual(r2.files.length, 0));
+  const det = await fetchOrderDetails(conf, 14);
+  await t('Siparisler sayfasi: musteri, kapida odeme, kargo, tutar', () => {
+    const o = det.orders.find((x) => x.no === 2266);
+    assert.ok(det.pii); assert.strictEqual(o.name, 'Ali Veli'); assert.strictEqual(o.city, 'İstanbul');
+    assert.strictEqual(o.financial, 'PENDING'); assert.deepStrictEqual(o.gateways, ['Cash on Delivery (COD)']);
+    assert.strictEqual(o.shipping, 'DHL eCommerce'); assert.strictEqual(o.total, 749.9);
+  });
+  global.DENY_PII = true;
+  const det2 = await fetchOrderDetails(conf, 14);
+  global.DENY_PII = false;
+  await t('Musteri verisi izni yoksa adsiz ama calisir', () => { assert.strictEqual(det2.pii, false); assert.strictEqual(det2.orders.find((x) => x.no === 2266).name, ''); });
+  const r0 = await runDownload({ ...conf, ignoreBefore: Date.now() + 1000 }, new Set(), () => {});
+  await t('Resetten sonra eski siparisler otomatik inmez', () => assert.strictEqual(r0.files.length, 0));
   const r3 = await runDownload({ ...conf, redownloadFrom: 2267 }, done, () => {});
   await t('Yeniden indir: dosya zaten varsa kopya olusturmaz', () => { assert.strictEqual(r3.files.length, 0); assert.strictEqual(r3.skipped, 2); });
   for (const f of fs.readdirSync(r.folder)) if (f.startsWith('2267')) fs.rmSync(path.join(r.folder, f));
