@@ -62,7 +62,7 @@ async function downloadFile(url, dir, baseName) {
   let lastErr;
   for (let i = 1; i <= 3; i++) {
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(5 * 60000) });   // buyuk dosya: 5 dk
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (!ext) {
         const ct = res.headers.get('content-type') || '';

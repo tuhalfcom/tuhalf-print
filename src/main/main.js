@@ -1,5 +1,11 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, Notification, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, Notification, nativeImage, powerMonitor } = require('electron');
+// Ag istekleri asla sonsuza kadar beklemesin (bilgisayar uykudan donunce ya da internet kopunca
+// asili kalan bir istek otomatik kontrolu durduruyordu). Kendi suresi verilmeyen istekler 60 sn'de kesilir.
+{
+  const nativeFetch = globalThis.fetch;
+  globalThis.fetch = (url, opts = {}) => nativeFetch(url, opts.signal ? opts : { ...opts, signal: AbortSignal.timeout(60000) });
+}
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -120,9 +126,12 @@ async function refreshHeld(skip) {
 }
 
 // ---------------- Indirme dongusu ----------------
+const RUN_LIMIT_MS = 15 * 60000;   // bir kontrol bundan uzun surerse takilmis sayilir
 async function checkNow(opts = {}) {
-  if (status.running) return { busy: true };
-  status.running = true; status.lastError = null; pushStatus();
+  if (status.running && Date.now() - (status.runStart || 0) < RUN_LIMIT_MS) return { busy: true };
+  if (status.running) log('warn', 'Önceki kontrol yanıt vermedi; yeniden başlatılıyor.');
+  const runId = (status.runId || 0) + 1;
+  status.running = true; status.runId = runId; status.runStart = Date.now(); status.lastError = null; pushStatus();
   const done = new Set(state.data.downloaded || []);
   try {
     const redo = Number(opts.redownloadFrom) || 0;
@@ -149,7 +158,7 @@ async function checkNow(opts = {}) {
     status.lastError = e.message; log('error', e.message);
     return { error: e.message };
   } finally {
-    status.running = false; status.lastCheck = Date.now(); schedule(); pushStatus();
+    if (status.runId === runId) { status.running = false; status.lastCheck = Date.now(); schedule(); pushStatus(); }
   }
 }
 
@@ -584,7 +593,7 @@ ipcMain.handle('labels-print', async (_e, o) => {
     log('ok', `${o.count || 1} kargo fişi yazıcıya gönderildi (${printer || 'varsayılan yazıcı'})`);
     send('kargo-updated');
     return { ok: true };
-  } catch (e) { log('error', `Kargo fişi basılamadı (${printer || 'varsayılan'}): ${e.message}`); return { error: e.message }; }
+  } catch (e) { log('error', `Kargo fişi yazdırılamadı (${printer || 'varsayılan'}): ${e.message}`); return { error: e.message }; }
 });
 ipcMain.handle('kargo-days', (_e, d) => { config.set({ kargo: { ...(config.data.kargo || {}), days: Number(d) || 14 } }); kargoCache = null; return true; });
 ipcMain.handle('label-mark', (_e, keys, on) => {
@@ -769,5 +778,11 @@ app.whenReady().then(() => {
   createTray();
   schedule();
   setTimeout(checkNow, 4000);
+  // Uykudan donunce hemen kontrol et; zamanlayici bir sekilde durmussa her dakika toparla
+  powerMonitor.on('resume', () => { log('info', 'Bilgisayar uykudan döndü, siparişler kontrol ediliyor…'); setTimeout(checkNow, 15000); });
+  setInterval(() => {
+    if (status.running && Date.now() - (status.runStart || 0) > RUN_LIMIT_MS) checkNow();
+    else if (!status.running && status.nextCheck && Date.now() > status.nextCheck + 2 * 60000) checkNow();
+  }, 60000);
   updater.start();
 });

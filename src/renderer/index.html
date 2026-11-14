@@ -108,23 +108,23 @@
       <header class="page-head">
           <div class="page-icon blue"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></div>
           <div class="page-titles"><h1>Kargo fişleri</h1><p>100×100 etiketler: kapıda ödeme (DHL) ve Geliver.</p></div>
-          <div class="page-actions"><button class="btn ghost" id="btnKargoTest" title="Kargo firmasına hiçbir şey göndermeden yazıcıya 100×100 deneme fişi basar"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>Deneme fişi</button><button class="btn" id="btnKargoRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button><button class="btn primary" id="btnKargoPrint" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Seçilenleri bas</span></button></div>
+          <div class="page-actions"><button class="btn ghost" id="btnKargoTest" title="Kargo firmasına hiçbir şey göndermeden yazıcıya 100×100 deneme fişi yazdırır"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>Deneme fişi</button><button class="btn" id="btnKargoRefresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Yenile</button><button class="btn primary" id="btnKargoPrint" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Seçilenleri yazdır</span></button></div>
         </header>
       <div class="setup hidden" id="kargoSetup"></div>
         <div class="carrier-tabs" id="kargoTabs">
           <button data-k="cod" class="carrier cod active">
             <span class="c-ico"><svg viewBox="0 0 24 24"><path d="M1 6h13v10H1z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="5.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg></span>
             <span class="c-txt"><b>Kapıda ödeme</b><small>DHL eCommerce · tahsilatlı gönderiler</small></span>
-            <span class="c-count"><b id="kcCod">0</b><small>basılacak</small></span>
+            <span class="c-count"><b id="kcCod">0</b><small>yazdırılacak</small></span>
           </button>
           <button data-k="geliver" class="carrier gel">
             <span class="c-ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></span>
             <span class="c-txt"><b>Geliver</b><small>Ödemesi alınmış siparişler · anlaşmalı kargolar</small></span>
-            <span class="c-count"><b id="kcGel">0</b><small>basılacak</small></span>
+            <span class="c-count"><b id="kcGel">0</b><small>yazdırılacak</small></span>
           </button>
         </div>
         <div class="kargo-sub">
-          <div class="tabs-line" id="kargoFilter"><button data-f="todo" class="active">Basılacaklar</button><button data-f="offer">Teklif bekleyen</button><button data-f="all">Tümü / eski fişler</button></div>
+          <div class="tabs-line" id="kargoFilter"><button data-f="todo" class="active">Yazdırılacaklar</button><button data-f="offer">Teklif bekleyen</button><button data-f="all">Tümü / eski fişler</button></div>
           <select id="kargoDays" class="days" title="Kaç günlük sipariş gösterilsin"><option value="14">Son 14 gün</option><option value="30">Son 30 gün</option><option value="60">Son 60 gün</option><option value="90">Son 90 gün</option></select>
           <span class="grow"></span>
           <span class="muted small" id="kargoInfo"></span>
@@ -230,7 +230,7 @@
       <label>Photoshop<div class="pick"><input name="photoshopPath" placeholder="Otomatik bulunur" /><button type="button" class="btn ghost small" data-pick="file" data-target="photoshopPath">Seç</button></div><small id="psFound"></small></label>
       <label class="check"><input type="checkbox" name="openAtLogin" /> Bilgisayar açılınca otomatik başlat</label>
           <h4 id="set-kargo">Kargo fişleri</h4>
-      <label>Etiket yazıcısı (100×100 mm)<select name="kargo.printer" id="printerSelect"><option value="">Varsayılan yazıcı</option></select><small>Kargo fişleri bu yazıcıya, 100×100 mm sayfa boyutunda, kenar boşluğu olmadan sessizce basılır.</small></label>
+      <label>Etiket yazıcısı (100×100 mm)<select name="kargo.printer" id="printerSelect"><option value="">Varsayılan yazıcı</option></select><small>Kargo fişleri bu yazıcıya, 100×100 mm sayfa boyutunda, kenar boşluğu olmadan sessizce yazdırılır.</small></label>
       <label>Geliver API anahtarı<input name="kargo.geliverToken" type="password" autocomplete="off" /><small>app.geliver.io › API Tokenlar</small></label>
       <div class="row2">
         <label>Kapıda ödeme etiket sunucusu<input name="kargo.codUrl" placeholder="https://tuhalf-etiket.….workers.dev" /></label>

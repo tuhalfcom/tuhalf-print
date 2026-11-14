@@ -27,7 +27,8 @@ function renderStatus() {
   $('#statusText').textContent = STATUS.running ? 'Siparişler kontrol ediliyor…'
     : STATUS.lastError ? 'Hata: ' + STATUS.lastError
     : `Son kontrol ${fmtTime(STATUS.lastCheck)} · Sonraki ${fmtTime(STATUS.nextCheck)}`;
-  $('#btnCheck').disabled = !!STATUS.running;
+  $('#btnCheck').disabled = false;
+  $('#btnCheck').classList.toggle('busy', !!STATUS.running);
 
   const job = STATUS.job;
   $('#jobOverlay').classList.toggle('hidden', !job);
@@ -242,7 +243,14 @@ async function doPrint(paths) {
   toast(ok === paths.length ? `${ok} sayfa yazıcıya gönderildi` : `${ok}/${paths.length} sayfa gönderildi, hatalar etkinlikte`, ok !== paths.length);
 }
 
-$('#btnCheck').onclick = async () => { const r = await window.api.checkNow(); if (r && r.error) toast(r.error, true); };
+$('#btnCheck').onclick = async () => {
+  toast('Shopify kontrol ediliyor…');
+  const r = await window.api.checkNow();
+  if (!r) return;
+  if (r.busy) toast('Kontrol zaten sürüyor, birazdan biter.');
+  else if (r.error) toast(r.error, true);
+  else toast(r.files && r.files.length ? `${r.files.length} yeni baskı dosyası indi` : `Yeni baskı dosyası yok${r.pending && r.pending.length ? ' · bekleyen: ' + r.pending.join(', ') : ''}`);
+};
 $('#btnBuild').onclick = async () => {
   const r = await window.api.build(FORCE);
   if (r.error) toast(r.error, true);
@@ -389,20 +397,20 @@ function renderKargo() {
     let st, act = '';
     if (KTAB === 'cod') {
       st = r.sorun ? `<span class="chip err">Adres hatası</span><div class="sub">${esc(r.sorun)}</div>`
-        : r.printedAt ? `<span class="chip printed">Basıldı ${fmtTime(r.printedAt)}</span>`
-        : r.etiketli ? '<span class="chip ready">DHL\'e kayıtlı</span><div class="sub">Tekrar basılabilir</div>'
-        : r.gonderim === 'FULFILLED' ? '<span class="chip pending">Gönderildi</span>' : '<span class="chip unprinted">Basılmadı</span>';
-      if (can) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt || r.etiketli ? 'Tekrar bas' : 'Bas'}</button>`;
-      if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="cod:${esc(r.no)}" title="Basılmadı olarak işaretle">↺</button>`;
+        : r.printedAt ? `<span class="chip printed">Yazdırıldı ${fmtTime(r.printedAt)}</span>`
+        : r.etiketli ? '<span class="chip ready">DHL\'e kayıtlı</span><div class="sub">Tekrar yazdırılabilir</div>'
+        : r.gonderim === 'FULFILLED' ? '<span class="chip pending">Gönderildi</span>' : '<span class="chip unprinted">Yazdırılmadı</span>';
+      if (can) act += `<button class="btn small" data-kprint="${esc(k)}">${r.printedAt || r.etiketli ? 'Tekrar yazdır' : 'Yazdır'}</button>`;
+      if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="cod:${esc(r.no)}" title="Yazdırılmadı olarak işaretle">↺</button>`;
       if (r.admin) act += `<button class="btn ghost small" data-url="${esc(r.admin)}">Shopify</button>`;
     } else {
       const ready = r.kind === 'ready';
-      st = r.printedAt ? `<span class="chip printed">Basıldı ${fmtTime(r.printedAt)}</span>`
-        : ready ? `<span class="chip unprinted">Basılmadı</span><div class="sub">${esc(r.statusText)}</div>`
+      st = r.printedAt ? `<span class="chip printed">Yazdırıldı ${fmtTime(r.printedAt)}</span>`
+        : ready ? `<span class="chip unprinted">Yazdırılmadı</span><div class="sub">${esc(r.statusText)}</div>`
         : r.kind === 'offer' ? `<span class="chip cod">${esc(r.statusText)}</span><div class="sub">Geliver'de teklif kabul edilmeli</div>`
         : `<span class="chip pending">${esc(r.statusText)}</span>`;
-      if (can) act += `<button class="btn small" data-kprint="${esc(k)}" title="Önizleyip basar (ücret yok)">${ready && !r.printedAt ? 'Bas' : 'Tekrar bas'}</button>`;
-      if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="geliver:${esc(r.id)}" title="Basılmadı olarak işaretle">↺</button>`;
+      if (can) act += `<button class="btn small" data-kprint="${esc(k)}" title="Önizleyip yazdırır (ücret yok)">${ready && !r.printedAt ? 'Yazdır' : 'Tekrar yazdır'}</button>`;
+      if (r.printedAt) act += `<button class="btn ghost small" data-kunmark="geliver:${esc(r.id)}" title="Yazdırılmadı olarak işaretle">↺</button>`;
       if (r.kind === 'offer') act += `<button class="btn ghost small" data-url="https://app.geliver.io/shipments?statusFilter=GOT_OFFERS">Geliver'de aç</button>`;
       if (r.trackingUrl) act += `<button class="btn ghost small" data-url="${esc(r.trackingUrl)}">Takip</button>`;
     }
@@ -414,9 +422,9 @@ function renderKargo() {
       <td>${esc(KTAB === 'cod' ? r.ad : r.name) || '—'}</td>
       <td class="addr">${esc(r.adres || r.address || '')}${place ? `<div class="sub">${esc(place)}</div>` : ''}</td>
       ${ship}<td>${st}</td><td><div class="act">${act}</div></td></tr>`;
-  }).join('') || `<tr><td colspan="8" class="muted">${KFILTER === 'todo' ? 'Basılacak kargo fişi yok.' : 'Gösterilecek gönderi yok.'}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="muted">${KFILTER === 'todo' ? 'Yazdırılacak kargo fişi yok.' : 'Gösterilecek gönderi yok.'}</td></tr>`;
   $('#btnKargoPrint').disabled = !KSEL.size;
-  $('#btnKargoPrint').lastChild.textContent = KSEL.size ? `Seçilenleri bas (${KSEL.size})` : 'Seçilenleri bas';
+  $('#btnKargoPrint').lastChild.textContent = KSEL.size ? `Seçilenleri yazdır (${KSEL.size})` : 'Seçilenleri yazdır';
   $('#kargoDays').value = String(k.days || 14);
   $('#kargoInfo').textContent = KG.at ? `Güncellendi ${fmtTime(KG.at)}` : '';
   renderAdres();
@@ -546,7 +554,7 @@ function renderHome() {
     { n: 1, ic: IC.down, c: 'c-blue', title: 'Siparişler indi', big: newFiles, unit: 'yeni dosya', sub: `Son 7 günde ${totalFiles} dosya. Program her ${CFG ? CFG.intervalMin : '?'} dakikada bir kendisi kontrol eder.`, btn: ['Siparişlere git', 'orders'], todo: false },
     { n: 2, ic: IC.grid, c: 'c-violet', title: 'Sayfaları hazırla', big: p.sheets.length, unit: 'sayfa', sub: p.placed ? `${p.placed} baskı dizilmeyi bekliyor.` + (p.waiting.length ? ` ${p.waiting.length} tasarım sonraki siparişleri bekliyor.` : '') : 'Dizilecek baskı yok.', btn: ['Baskı sırasını aç', 'plan'], todo: p.sheets.length > 0 },
     { n: 3, ic: IC.print, c: 'c-green', title: 'Sayfaları bas', big: unprintedSheets, unit: 'sayfa', sub: unprintedSheets ? 'Photoshop’ta kontrol edip Print ile basın.' : 'Bekleyen baskı sayfası yok.', btn: ['Hazır sayfalara git', 'sheets'], todo: unprintedSheets > 0 },
-    { n: 4, ic: IC.box, c: 'c-orange', title: 'Kargo fişlerini bas', big: KG ? todoCod + todoGel : '–', unit: 'fiş', sub: KG ? `Kapıda ödeme ${todoCod} · Geliver ${todoGel}` : 'Kargo bağlantısı kurulunca görünür.', btn: ['Kargo fişlerine git', 'kargo'], todo: todoCod + todoGel > 0 },
+    { n: 4, ic: IC.box, c: 'c-orange', title: 'Kargo fişlerini yazdır', big: KG ? todoCod + todoGel : '–', unit: 'fiş', sub: KG ? `Kapıda ödeme ${todoCod} · Geliver ${todoGel}` : 'Kargo bağlantısı kurulunca görünür.', btn: ['Kargo fişlerine git', 'kargo'], todo: todoCod + todoGel > 0 },
   ];
   $('#homeFlow').innerHTML = steps.map((st) => `<div class="step ${st.todo ? 'todo' : st.big === 0 ? 'done' : ''}">
       <div class="step-top"><span class="step-no">${st.big === 0 && !st.todo ? '✓' : st.n}</span><span class="step-title">${esc(st.title)}</span><span class="step-ic ${st.c}">${st.ic}</span></div>

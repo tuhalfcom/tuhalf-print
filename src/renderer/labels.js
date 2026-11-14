@@ -48,7 +48,7 @@ async function doPrint(silent) {
   else { const ps = paperSize(); r = await window.lapi.print({ printer, paper: $('#paper').value, html: printHtmlFromPages(PAGES), keys: PAGES.map((p) => p.key).filter(Boolean), count: PAGES.length, silent, wMm: ps.w, hMm: ps.h }); }
   $('#btnPrint').textContent = 'Yazdır'; btns.forEach((b) => { b.disabled = false; });
   $('#msgs').querySelectorAll('.msg.ok, .msg.perr').forEach((m) => m.remove());
-  if (r.error) msg(`<b>Basılamadı:</b> ${esc(r.error)}<br>Yazıcının açık ve doğru seçili olduğunu kontrol edin. Olmazsa “Yazdırma penceresiyle…” deneyin.`, 'perr');
+  if (r.error) msg(`<b>Yazdırılamadı:</b> ${esc(r.error)}<br>Yazıcının açık ve doğru seçili olduğunu kontrol edin. Olmazsa “Yazdırma penceresiyle…” deneyin.`, 'perr');
   else msg(`✓ Yazıcıya gönderildi: <b>${esc(printer || 'varsayılan yazıcı')}</b>`, 'ok');
 }
 
@@ -79,14 +79,14 @@ async function main() {
   if (f && HTMLJOB) f.srcdoc = HTMLJOB.html.replace(/\$\{YAZICI\}/g, esc($('#printer').value || 'Varsayılan yazıcı'));
   const ready = PAGES.length || HTMLJOB;
   $('#btnPrint').disabled = !ready; $('#btnDialog').disabled = !ready;
-  if (PAGES.length && PAGES.some((p) => Math.abs(p.wMm - PAGES[0].wMm) > 1 || Math.abs(p.hMm - PAGES[0].hMm) > 1)) msg('Fişlerin ölçüleri farklı; hepsi ilk fişin ölçüsünde basılacak.', 'info');
+  if (PAGES.length && PAGES.some((p) => Math.abs(p.wMm - PAGES[0].wMm) > 1 || Math.abs(p.hMm - PAGES[0].hMm) > 1)) msg('Fişlerin ölçüleri farklı; hepsi ilk fişin ölçüsünde yazdırılacak.', 'info');
   if (PAGES.length) {
     const w = Math.round(PAGES[0].wMm), h = Math.round(PAGES[0].hMm);
     const same = Math.abs(w - 100) < 2 && Math.abs(h - 100) < 2;
     $('#paper').innerHTML = `<option value="100">100 × 100 mm${same ? '' : ' (sığdır)'}</option>` + (same ? '' : `<option value="own">${w} × ${h} mm (fişin ölçüsü)</option>`);
     $('#paper').value = !same && pr.paper === 'own' ? 'own' : '100';
     $('#paper').classList.toggle('hidden', same); $('#paperLbl').classList.toggle('hidden', same);
-    if (!same) msg(`Bu fişler ${w}×${h} mm. 100×100 kağıda basarken küçültülüp sığdırılır; etiket ruloda ${w}×${h} ise “Kağıt”tan fişin ölçüsünü seçin.`, 'info');
+    if (!same) msg(`Bu fişler ${w}×${h} mm. 100×100 kağıda yazdırırken küçültülüp sığdırılır; etiket ruloda ${w}×${h} ise “Kağıt”tan fişin ölçüsünü seçin.`, 'info');
   }
 }
 $('#btnPrint').onclick = () => doPrint(true);
