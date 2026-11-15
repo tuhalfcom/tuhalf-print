@@ -46,7 +46,7 @@ Soldaki tek menü: **Bugün** (günün işleri 1→4 ve uyarılar), **Baskı sı
 ## Derleme (geliştirici)
 ```
 npm install
-npm test            # 43 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
+npm test            # 44 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
 npm start           # geliştirme modunda aç
 npm run dist:win    # dist/Tuhalf-Print-Kurulum-1.1.0.exe
 npm run dist:mac    # dist/Tuhalf-Print-1.1.0-mac.dmg (Mac'te)

@@ -258,15 +258,41 @@ function addressChanged(s, a) {
   return norm(s.address) !== norm([a.address1, a.address2].filter(Boolean).join(' ')) || norm(s.city) !== norm(IL[Number(cityCodeOf(a) || 0) - 1] || a.province || '') || !s.district || /BULUNAMADI/i.test(s.district);
 }
 
-async function updateGeliverAddress(token, shipmentId, address, fetchFn = fetch) {
-  const r = await fetchFn(`${GELIVER_API}/shipments/${encodeURIComponent(shipmentId)}`, {
-    method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ recipientAddress: address }),
-  });
+function geliverErr(j, status) {
+  if (!j) return `Geliver HTTP ${status}`;
+  const parts = [j.message, j.additionalMessage, j.code && `kod ${j.code}`].filter((x, i, a) => x && a.indexOf(x) === i);
+  return parts.join(' — ') || `Geliver HTTP ${status}`;
+}
+async function sendJson(method, url, token, body, fetchFn) {
+  const r = await fetchFn(url, { method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
   const t = await r.text();
   let j = null; try { j = JSON.parse(t); } catch { /* */ }
-  if (!r.ok || (j && j.result === false)) throw new Error((j && (j.additionalMessage || j.message)) || `Geliver HTTP ${r.status}`);
-  return j && j.data ? mapShipment(j.data) : null;
+  if (!r.ok || (j && j.result === false)) { const e = new Error(geliverErr(j, r.status)); e.status = r.status; throw e; }
+  return j;
+}
+// Geliver gonderisinin alici adresini degistir. Once adres dogrudan yazilir; Geliver kabul etmezse
+// yeni bir alici adresi olusturulup gonderiye o adres baglanir.
+async function updateGeliverAddress(token, shipmentId, address, fetchFn = fetch) {
+  const url = `${GELIVER_API}/shipments/${encodeURIComponent(shipmentId)}`;
+  const errs = [];
+  try {
+    const j = await sendJson('PATCH', url, token, { recipientAddress: address }, fetchFn);
+    return j && j.data ? mapShipment(j.data) : null;
+  } catch (e) { errs.push('adres yazma: ' + e.message); }
+  let addrId = null;
+  try {
+    const body = { ...address, isRecipientAddress: true, shortName: (address.name || 'Alıcı').slice(0, 40) };
+    const j = await sendJson('POST', `${GELIVER_API}/addresses`, token, body, fetchFn);
+    addrId = j && j.data && j.data.id;
+    if (!addrId) throw new Error('adres kimliği dönmedi');
+  } catch (e) { errs.push('yeni adres: ' + e.message); }
+  if (addrId) {
+    try {
+      const j = await sendJson('PATCH', url, token, { recipientAddressID: addrId }, fetchFn);
+      return j && j.data ? mapShipment(j.data) : null;
+    } catch (e) { errs.push('adres bağlama: ' + e.message); }
+  }
+  throw new Error('Geliver adresi güncellemedi (' + errs.join(' · ') + '). Adresi Geliver panelinde gönderinin içinden düzeltebilirsiniz.');
 }
 
 module.exports = { geliverBalance, geliverShipment, geliverBuy, preferredOffer, geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };

@@ -404,6 +404,25 @@ $('#btnOrdRefresh').onclick = async () => {
 };
 // ---------- Kargo fisleri ----------
 let KG = null, KTAB = 'cod', KFILTER = 'todo';
+// Sayfalama: sayfa basina 10/25/50/100 siparis (secim hatirlanir)
+let KPAGE = 1, KSIZE = 25;
+try { KSIZE = Number(localStorage.getItem('kargoPageSize')) || 25; } catch { /* */ }
+function pageRows(rows) {
+  const pages = Math.max(1, Math.ceil(rows.length / KSIZE));
+  if (KPAGE > pages) KPAGE = pages;
+  if (KPAGE < 1) KPAGE = 1;
+  return { list: rows.slice((KPAGE - 1) * KSIZE, KPAGE * KSIZE), pages, total: rows.length };
+}
+function renderPager(pg) {
+  const el = $('#kargoPager');
+  if (!pg.total) { el.innerHTML = ''; return; }
+  const from = (KPAGE - 1) * KSIZE + 1, to = Math.min(pg.total, KPAGE * KSIZE);
+  const nums = [];
+  for (let i = 1; i <= pg.pages; i++) if (i === 1 || i === pg.pages || Math.abs(i - KPAGE) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
+  el.innerHTML = `<div class="pg-info">${from}–${to} / ${pg.total} sipariş</div>
+    <div class="pg-nav">${pg.pages > 1 ? `<button class="pg-btn" data-pg="${KPAGE - 1}" ${KPAGE === 1 ? 'disabled' : ''} title="Önceki sayfa">‹</button>${nums.map((n) => (n === '…' ? '<span class="pg-gap">…</span>' : `<button class="pg-btn ${n === KPAGE ? 'active' : ''}" data-pg="${n}">${n}</button>`)).join('')}<button class="pg-btn" data-pg="${KPAGE + 1}" ${KPAGE === pg.pages ? 'disabled' : ''} title="Sonraki sayfa">›</button>` : ''}</div>
+    <label class="pg-size">Sayfada <select id="kargoPageSize">${[10, 25, 50, 100].map((n) => `<option value="${n}" ${n === KSIZE ? 'selected' : ''}>${n}</option>`).join('')}</select> sipariş</label>`;
+}
 const KSEL = new Set();
 const money = (n) => (n == null ? '—' : Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺');
 const fmtD = (t) => { if (!t) return '—'; const d = new Date(t); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
@@ -492,9 +511,11 @@ function renderKargo() {
   const keyOf = (r) => (KTAB === 'cod' ? r.id : r.id);
   for (const k of [...KSEL]) if (!rows.some((r) => keyOf(r) === k)) KSEL.delete(k);
   const selectable = kSelectable;
-  const all = rows.filter(selectable);
-  $('#kargoHead').innerHTML = `<tr><th class="cb">${all.length ? `<input type="checkbox" id="kAll" title="Hepsini seç (${all.length})" ${all.every((r) => KSEL.has(keyOf(r))) ? 'checked' : ''}>` : ''}</th><th>Sipariş</th><th>Tarih</th><th>Alıcı</th><th>Adres</th>${KTAB === 'cod' ? '<th class="num">Tahsilat</th>' : '<th>Kargo</th>'}<th>Durum</th><th></th></tr>`;
-  $('#kargoRows').innerHTML = rows.map((r) => {
+  const pg = pageRows(rows);
+  const all = pg.list.filter(selectable);   // "Hepsini sec" bu sayfadakileri secer
+  $('#kargoHead').innerHTML = `<tr><th class="cb">${all.length ? `<input type="checkbox" id="kAll" title="Bu sayfadakilerin hepsini seç (${all.length})" ${all.every((r) => KSEL.has(keyOf(r))) ? 'checked' : ''}>` : ''}</th><th>Sipariş</th><th>Tarih</th><th>Alıcı</th><th>Adres</th>${KTAB === 'cod' ? '<th class="num">Tahsilat</th>' : '<th>Kargo</th>'}<th>Durum</th><th></th></tr>`;
+  renderPager(pg);
+  $('#kargoRows').innerHTML = pg.list.map((r) => {
     const k = keyOf(r), can = selectable(r);
     let st, act = '';
     if (KTAB === 'cod') {
@@ -560,20 +581,22 @@ async function loadKargo(force) {
   if (r.error) { toast(r.error, true); return; }
   KG = r; renderKargo(); renderHome();
 }
-$('#kargoTabs').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; KTAB = b.dataset.k; KSEL.clear(); for (const x of $('#kargoTabs').children) x.classList.toggle('active', x === b); renderKargo(); };
-$('#kargoDays').onchange = async (e) => { const v = e.target.value; await window.api.kargoDays(v); if (CFG) CFG.kargo = { ...(CFG.kargo || {}), range: v, days: ({ today: 1, yesterday: 2 })[v] || Number(v) || 14 }; KSEL.clear(); renderKargo(); loadKargo(true); };
-$('#kargoFilter').onclick = (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; KFILTER = b.dataset.f; KSEL.clear(); renderKargo(); };
+$('#kargoTabs').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; KTAB = b.dataset.k; KSEL.clear(); KPAGE = 1; for (const x of $('#kargoTabs').children) x.classList.toggle('active', x === b); renderKargo(); };
+$('#kargoDays').onchange = async (e) => { const v = e.target.value; KPAGE = 1; await window.api.kargoDays(v); if (CFG) CFG.kargo = { ...(CFG.kargo || {}), range: v, days: ({ today: 1, yesterday: 2 })[v] || Number(v) || 14 }; KSEL.clear(); renderKargo(); loadKargo(true); };
+$('#kargoFilter').onclick = (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; KFILTER = b.dataset.f; KSEL.clear(); KPAGE = 1; renderKargo(); };
 async function refreshKargoBtn(b) {
   const label = b.lastChild.textContent;
   b.disabled = true; b.lastChild.textContent = 'Yenileniyor…';
   try { await loadKargo(true); toast(`Güncellendi · ${(KG && KG.errors ? KG.errors.length : 0)} adres hatası`); }
   finally { b.disabled = false; b.lastChild.textContent = label; }
 }
+$('#kargoPager').onclick = (e) => { const b = e.target.closest('[data-pg]'); if (!b || b.disabled) return; KPAGE = Number(b.dataset.pg); renderKargo(); $('#view-kargo').scrollTop = 0; document.querySelector('.kargo-table').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+$('#kargoPager').onchange = (e) => { if (e.target.id !== 'kargoPageSize') return; KSIZE = Number(e.target.value) || 25; KPAGE = 1; try { localStorage.setItem('kargoPageSize', String(KSIZE)); } catch { /* */ } renderKargo(); };
 $('#btnKargoRefresh').onclick = () => refreshKargoBtn($('#btnKargoRefresh'));
 $('#btnAdresRefresh').onclick = () => refreshKargoBtn($('#btnAdresRefresh'));
 $('#kargoRows').onchange = $('#kargoHead').onchange = (e) => {
   if (e.target.id === 'kAll') {
-    const rows = (KTAB === 'cod' ? codRows() : gelRows()).filter(kSelectable);
+    const rows = pageRows(KTAB === 'cod' ? codRows() : gelRows()).list.filter(kSelectable);
     for (const r of rows) e.target.checked ? KSEL.add(r.id) : KSEL.delete(r.id);
   } else if (e.target.dataset.ksel) { e.target.checked ? KSEL.add(e.target.dataset.ksel) : KSEL.delete(e.target.dataset.ksel); }
   renderKargo();

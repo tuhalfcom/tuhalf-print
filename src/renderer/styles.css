@@ -390,3 +390,16 @@ select.days { height: 32px; padding: 0 8px; border: 1px solid var(--line-2); bor
 .carrier .c-txt .bal .bal-link:hover { background: #30333b; }
 .carrier .c-txt .bal .bal-link.warn { border-color: #f0566a; background: rgba(240, 86, 106, .16); color: #ffb3bd; }
 .carrier.gel.low { border-color: #f0566a !important; box-shadow: 0 0 0 3px rgba(240, 86, 106, .14) !important; }
+
+/* Sayfalama */
+.pager { display: flex; align-items: center; gap: 16px; padding: 12px 4px 4px; }
+.pager:empty { display: none; }
+.pager .pg-info { color: var(--muted); font-size: 12.5px; min-width: 150px; }
+.pager .pg-nav { flex: 1; display: flex; justify-content: center; gap: 4px; }
+.pager .pg-btn { min-width: 32px; height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.pager .pg-btn:hover:not(:disabled) { background: #2a2d34; }
+.pager .pg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pager .pg-btn:disabled { opacity: .35; cursor: default; }
+.pager .pg-gap { color: var(--muted); padding: 0 4px; align-self: center; }
+.pager .pg-size { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 6px; min-width: 150px; justify-content: flex-end; }
+.pager .pg-size select { height: 30px; padding: 0 6px; border: 1px solid var(--line-2, #3a3e46); border-radius: 7px; background: var(--input, #17181b); color: var(--text); font: inherit; }

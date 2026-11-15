@@ -147,6 +147,17 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     const f3 = async (u) => ({ ok: !/balance/.test(u), status: /balance/.test(u) ? 404 : 200, text: async () => JSON.stringify(/balance/.test(u) ? {} : { data: [{ id: 'o', creditBalance: 900, debitBalance: 100 }] }) });
     assert.strictEqual(await K.geliverBalance('t', f3), 800);
   });
+  await t('Geliver adres: dogrudan yazma reddedilirse yeni adres olusturup baglar', async () => {
+    const calls = [];
+    const f = async (u, o) => { calls.push(o.method + ' ' + u.replace(/^.*v1/, '') + ' ' + o.body);
+      if (o.method === 'PATCH' && /recipientAddress"/.test(o.body)) return { ok: false, status: 400, text: async () => JSON.stringify({ result: false, message: 'Recipient address' }) };
+      if (o.method === 'POST') return { ok: true, status: 201, text: async () => JSON.stringify({ result: true, data: { id: 'adr9' } }) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ result: true, data: { id: 'sh1', statusCode: 'GOT_OFFERS' } }) }; };
+    const u = await K.updateGeliverAddress('tok', 'sh1', { name: 'Ali', cityCode: '34' }, f);
+    assert.strictEqual(u.id, 'sh1'); assert.strictEqual(calls.length, 3); assert.match(calls[2], /recipientAddressID":"adr9/);
+    const bad = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ result: false, message: 'Recipient address', additionalMessage: 'districtID invalid' }) });
+    await assert.rejects(K.updateGeliverAddress('tok', 'sh1', { name: 'Ali' }, bad), /Recipient address — districtID invalid/);
+  });
   await t('Adres duzeltme (#2187): il yanlis secilmis (Afyon), adreste Fatih Istanbul yaziyor', async () => {
     const r = await A({ name: 'Mustafa Kapçak', address1: 'Alişan Sokak Nişanca Mahallesi Fatih İstanbul', address2: 'No5 daire7', city: 'İstanbul', zip: '034', province: 'Afyonkarahisar', provinceCode: 'TR-03' });
     assert.strictEqual(r.address.cityCode, '34'); assert.strictEqual(r.address.districtName, 'Fatih');
