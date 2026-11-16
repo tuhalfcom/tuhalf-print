@@ -1,5 +1,6 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
+const eyeBtn = (no) => `<button class="eye" data-od="${esc(no)}" title="Siparişi önizle"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—');
 let CFG = null, STATUS = {}, SHEETS = [], PLAN = null, ORDR = null, PSFOUND = null;
@@ -145,15 +146,15 @@ async function loadPlan() {
   $('#forceAll').checked = FORCE;
   $('#waitingTitle').textContent = FORCE ? 'Bekleyenler de diziliyor' : `Bekleyen (${p.waiting.length})`;
   $('#waitingList').innerHTML = p.waiting.map((n) => `<span class="tag">${esc(n)}</span>`).join('') || (FORCE ? '<span class="muted small">Tüm tasarımlar sayfalara yerleşti.</span>' : '');
-  const area = CFG ? CFG.print.rollWidthMm * CFG.print.maxLengthMm : 0;
-  const fillOf = (s) => (area ? Math.round(100 * s.items.filter((i) => !i.card).reduce((a, i) => a + i.wMm * i.hMm, 0) / area) : 0);
+  // Doluluk: yazici tasarim bitince kestigi icin sayfanin KULLANILAN boyuna gore hesaplanir (609,6 x kullanilan uzunluk)
+  const fillOf = (s) => { const a = (s.widthMm || (CFG ? CFG.print.rollWidthMm : 0)) * (s.lengthMm || 0); return a ? Math.min(100, Math.round(100 * s.items.filter((i) => !i.card).reduce((x, i) => x + i.wMm * i.hMm, 0) / a)) : 0; };
   const fills = p.sheets.map(fillOf);
   if (fills.length) $('#planSummary').textContent += ` · ortalama doluluk %${Math.round(fills.reduce((a, b) => a + b, 0) / fills.length)}`;
   let html = p.sheets.map((s, n) => {
     const designs = s.items.filter((i) => !i.card).length;
     const f = fills[n];
     return `<div class="artboard">
-      <div class="artboard-title"><b>Sayfa ${n + 1}</b><span>${designs} baskı${s.cards ? ` · ${s.cards} kart` : ''} <span class="fill ${f < 40 ? 'low' : f < 65 ? 'mid' : ''}" title="Tasarımların sayfada kapladığı alan (kartlar hariç)">%${f} dolu</span></span></div>
+      <div class="artboard-title"><b>Sayfa ${n + 1}</b><span>${designs} baskı${s.cards ? ` · ${s.cards} kart` : ''} <span class="fill ${f < 50 ? 'low' : f < 70 ? 'mid' : ''}" title="Tasarımların, basılacak alanda kapladığı yer (kartlar hariç). Yazıcı tasarım bitince kestiği için boş kalan uzunluk sayılmaz.">%${f} dolu · ${Math.round(s.lengthMm / 10)} cm</span></span></div>
       ${paperHtml(s, s.items)}
     </div>`;
   }).join('');
@@ -414,7 +415,7 @@ function renderOrdersPage() {
     const files = o.local ? o.local.files.map((f) => `<div class="ord-file" data-path="${esc(f.path)}" title="Klasörde göster">${f.isNew ? '<span class="new-dot" title="Yeni"></span>' : ''}<span class="tag">${esc(f.size || '?')}</span><span class="fname">${esc(f.name)}</span></div>`).join('') : '';
     const items = !files && o.items && o.items.length ? `<div class="sub">${o.items.map((i) => esc(`${i.qty}× ${i.title}${i.variant ? ' / ' + i.variant : ''}`)).join('<br>')}</div>` : '';
     return `<tr class="${o.cancelled ? 'cancelled' : ''}">
-      <td class="no">#${o.no}${o.cancelled ? '<div class="sub">İptal</div>' : ''}</td>
+      <td class="no"><div class="no-wrap">${eyeBtn(o.no)}<span>#${o.no}</span></div>${o.cancelled ? '<div class="sub">İptal</div>' : ''}</td>
       <td>${fmtDate(o.createdAt)}</td>
       <td>${o.name ? esc(o.name) : '<span class="muted">—</span>'}${o.city ? `<div class="sub">${esc(o.city)}</div>` : ''}</td>
       <td>${payCell(o)}</td>
@@ -623,7 +624,7 @@ function renderKargo() {
     const held = KTAB === 'geliver' && r.kind === 'offer' && r.pay && r.pay.hold;
     return `<tr class="${KSEL.has(k) ? 'sel' : ''}${held ? ' held' : ''}">
       <td class="cb">${can ? `<input type="checkbox" data-ksel="${esc(k)}" ${KSEL.has(k) ? 'checked' : ''}>` : ''}</td>
-      <td class="no">#${esc(r.no || '?')}</td><td>${fmtD(KTAB === 'cod' ? r.tarih : r.createdAt)}</td>
+      <td class="no"><div class="no-wrap">${r.no ? eyeBtn(r.no) : ''}<span>#${esc(r.no || '?')}</span></div></td><td>${fmtD(KTAB === 'cod' ? r.tarih : r.createdAt)}</td>
       <td>${esc(KTAB === 'cod' ? r.ad : r.name) || '—'}</td>
       <td class="addr">${esc(r.adres || r.address || '')}${place ? `<div class="sub">${esc(place)}</div>` : ''}</td>
       ${ship}<td>${st}</td><td><div class="act">${act}</div></td></tr>`;
@@ -651,7 +652,7 @@ function renderAdres() {
       else if (e.shopNote) note = `<div class="sub">${esc(e.shopNote)}</div>`;
     }
     return `<tr>
-    <td class="no">#${esc(e.no || '?')}</td>
+    <td class="no"><div class="no-wrap">${e.no ? eyeBtn(e.no) : ''}<span>#${esc(e.no || '?')}</span></div></td>
     <td>${e.source === 'cod' ? '<span class="chip cod">Kapıda ödeme · DHL</span>' : '<span class="chip ship">Geliver</span>'}</td>
     <td>${esc(e.name || '—')}</td>
     <td class="addr">${esc(e.address || '')}${e.city ? `<div class="sub">${esc(e.city)}</div>` : ''}</td>
@@ -989,7 +990,7 @@ async function openOrder(no) {
   if (!no) return;
   OD_NO = no;
   $('#odNo').textContent = '#' + no; $('#odSub').textContent = 'Yükleniyor…';
-  $('#odBody').innerHTML = '<div class="muted small" style="padding:18px">Yükleniyor…</div>';
+  $('#odBody').innerHTML = '<div class="muted small">Yükleniyor…</div>'; $('#odPreview').innerHTML = '';
   $('#od').classList.add('open'); $('#odBg').classList.remove('hidden');
   const d = await window.api.orderInfo(no);
   if (OD_NO !== no) return;
@@ -1005,8 +1006,12 @@ async function openOrder(no) {
   if (d.hold) parts.push(`<div class="od-warn">⚠ ${esc(d.hold)} — baskı ve kargo bekletiliyor.</div>`);
   // urunler
   if (row.items && row.items.length) parts.push(sec('Ürünler', `<ul class="od-items">${row.items.map((i) => `<li><b>${i.qty}×</b> ${esc(i.title)}${i.variant ? `<span class="muted"> / ${esc(i.variant)}</span>` : ''}</li>`).join('')}</ul>${row.total != null ? `<div class="od-total">${money(row.total)} · ${esc(row.shipping || '')}</div>` : ''}`));
-  // baski dosyalari
-  parts.push(sec(`Baskı dosyaları (${d.files.length})`, d.files.length ? `<div class="od-files">${d.files.map((f) => `<div class="od-file" data-show="${esc(f.path)}" title="Klasörde göster">${f.thumb ? `<img src="${window.api.fileUrl(f.thumb)}" alt="">` : '<div class="od-noimg"></div>'}<div><b>${esc(f.size || '?')}</b> ${esc(f.color || '')}${f.qty > 1 ? ` · ${f.qty} adet` : ''}<div class="muted small">${esc(f.name)}</div><div class="muted small">${esc(dayLabel(f.folder))} · ${f.status === 'arranged' ? 'sayfaya dizildi' : 'dizilmeyi bekliyor'}</div></div></div>`).join('')}</div>` : '<div class="muted small">Bu siparişin dosyası inmemiş.</div>'));
+  // baski dosyalari (buyuk onizleme solda)
+  parts.push(sec(`Baskı dosyaları (${d.files.length})`, d.files.length ? `<div class="od-files">${d.files.map((f, i) => `<button class="od-file" data-odfocus="${i}"><b>${esc(f.size || '?')}</b> ${esc(f.color || '')}${f.qty > 1 ? ` · ${f.qty} adet` : ''}<span>${f.status === 'arranged' ? 'sayfaya dizildi' : 'dizilmeyi bekliyor'}</span></button>`).join('')}</div>` : '<div class="muted small">Bu siparişin dosyası inmemiş. “Dosyayı yeniden indir” ile deneyin.</div>'));
+  const multi = d.files.length > 1;
+  $('#odPreview').className = 'od-preview' + (multi ? ' multi' : '') + (d.files.length ? '' : ' empty');
+  $('#odPreview').innerHTML = d.files.length ? d.files.map((f, i) => `<figure class="od-art" id="odArt${i}"><div class="od-sheet"><img src="${window.api.fileUrl(f.path)}" alt="${esc(f.name)}" loading="lazy"></div><figcaption><b>${esc(f.size || '?')} ${esc(f.color || '')}</b><span>${esc(f.name)}</span><button class="btn ghost small" data-show="${esc(f.path)}">Klasörde göster</button></figcaption></figure>`).join('')
+    : '<div class="od-none"><b>Tasarım dosyası yok</b><span>Sipariş gelince ya da “Dosyayı yeniden indir” ile burada görünür.</span></div>';
   if (d.sheets.length) parts.push(sec('Baskı sayfaları', d.sheets.map((x) => `<div class="od-line"><span>${esc(dayLabel(x.folder))} · <b>${esc(x.sheet)}</b></span>${x.printedAt ? `<span class="chip printed">Basıldı ${fmtTime(x.printedAt)}${x.printedBy ? ' · ' + esc(x.printedBy) : ''}</span>` : '<span class="chip ready">Basılmadı</span>'}</div>`).join('')));
   // kargo
   const kargo = [];
@@ -1028,8 +1033,9 @@ async function openOrder(no) {
 function closeOrder() { OD_NO = null; $('#od').classList.remove('open'); $('#odBg').classList.add('hidden'); }
 $('#odClose').onclick = closeOrder; $('#odBg').onclick = closeOrder;
 $('#odBody').addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-odredo],[data-odlabel],[data-odclose]');
+  const b = e.target.closest('[data-odredo],[data-odlabel],[data-odclose],[data-odfocus]');
   if (!b) return;
+  if (b.dataset.odfocus) { const el = $('#odArt' + b.dataset.odfocus); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (b.dataset.odclose) { closeOrder(); return; }
   if (b.dataset.odredo) {
     b.disabled = true; b.textContent = 'İndiriliyor…';
@@ -1043,12 +1049,14 @@ $('#odBody').addEventListener('click', async (e) => {
     if (r && r.error) toast(r.error, true);
   }
 });
-// tablolardan ac: siparis satirina tikla
+// tablolardan ac: goz simgesi ya da satira tikla
 document.addEventListener('click', (e) => {
+  const eye = e.target.closest('[data-od]');
+  if (eye) { e.stopPropagation(); openOrder(eye.dataset.od); return; }
   if (e.target.closest('button, a, input, select, label, .ord-file, [data-path], [data-url], [data-show]')) return;
   const tr = e.target.closest('#ordRows tr, #kargoRows tr, #adresRows tr');
   if (!tr) return;
-  const noCell = tr.querySelector('.no') || tr.cells[tr.closest('#kargoRows') ? 1 : 0];
+  const noCell = tr.querySelector('.no');
   const m = noCell && noCell.textContent.match(/#?(\d{3,})/);
   if (m) openOrder(m[1]);
 });

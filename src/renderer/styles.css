@@ -516,3 +516,165 @@ kbd { font: 11px/1 "Segoe UI", system-ui, sans-serif; padding: 3px 6px; border-r
 .empty-state .es-ic { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: rgba(52,195,143,.12); color: #3ecf98; font-size: 26px; }
 .empty-state b { color: var(--text); font-size: 15px; }
 .sheet-day { grid-column: 1 / -1; margin: 8px 0 -4px; color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+
+/* =====================================================================
+   Tasarim katmani 2.0 — "baski atolyesi"
+   Grafit calisma masasi; tek marka rengi Tuhalf turuncusu sadece ana eylemde ve
+   secili menude. Durumlar: yesil (tamam), kehribar (bekliyor), kirmizi (sorun).
+   Tasarimlar (baski dosyalari) kesim matina benzeyen ince izgarali zeminde gosterilir.
+   Yazi: IBM Plex Sans (matbaa/endustri karakteri, Turkce harfler tam).
+   ===================================================================== */
+@font-face { font-family: "Plex"; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-sans-latin-ext-400-normal.woff2) format("woff2"); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Plex"; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-sans-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Plex"; font-weight: 500; font-display: swap; src: url(fonts/ibm-plex-sans-latin-ext-500-normal.woff2) format("woff2"); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Plex"; font-weight: 500; font-display: swap; src: url(fonts/ibm-plex-sans-latin-500-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Plex"; font-weight: 600; font-display: swap; src: url(fonts/ibm-plex-sans-latin-ext-600-normal.woff2) format("woff2"); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Plex"; font-weight: 600; font-display: swap; src: url(fonts/ibm-plex-sans-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Plex"; font-weight: 700; font-display: swap; src: url(fonts/ibm-plex-sans-latin-ext-700-normal.woff2) format("woff2"); unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Plex"; font-weight: 700; font-display: swap; src: url(fonts/ibm-plex-sans-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root {
+  --bg: #141518;
+  --side: #17181b;
+  --card: #1c1e22;
+  --card-2: #23262b;
+  --hover: #2a2d33;
+  --line: #272a30;
+  --line-2: #343840;
+  --input: #111215;
+  --text: #ecebe7;
+  --muted: #9a9da5;
+  --faint: #676b74;
+  --accent: #ff6a00;        /* Tuhalf turuncusu: sadece ana eylem + secili menu */
+  --accent-2: #ff8326;
+  --on-accent: #1b0c00;
+  --ok: #3ecf8e;
+  --warn: #f2a93b;
+  --err: #f2596c;
+  --mat: #17211d;           /* kesim mati */
+  --mat-line: rgba(120, 190, 160, .07);
+  --r-xs: 4px; --r-sm: 8px; --r: 12px;
+}
+body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacing: .005em; -webkit-font-smoothing: antialiased; }
+.num, .ord-table td.num, .step-big, .sum-cell b, .tp-num, .nav-badge, .fill, .pg-btn, .od-no { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Dugmeler: turuncu sadece ana eylem; yazisi koyu (okunurluk) */
+.btn { border-radius: var(--r-sm); font-weight: 600; background: var(--card-2); border-color: var(--line-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.primary svg { stroke-width: 2.1; }
+.btn.update { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.buy { background: transparent; border-color: #ff6000; color: #ffb27a; }
+.btn.buy:hover:not(:disabled) { background: rgba(255, 96, 0, .12); }
+
+/* Sol menu */
+.side { padding: 14px 10px; }
+.nav-group { margin: 18px 12px 6px; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--faint); }
+.nav-item { height: 38px; color: #c9cbd0; border-radius: var(--r-sm); }
+.nav-item.active { background: rgba(255, 106, 0, .09); color: #fff; }
+.nav-item.active svg { color: var(--accent); }
+.nav-item.active::before { background: var(--accent); }
+.nav-badge { background: #2d3036; color: #dcdde1; border-radius: 6px; height: 19px; }
+.nav-badge.blue { background: rgba(255, 106, 0, .16); color: #ffb27a; }
+.nav-badge.red { background: rgba(242, 89, 108, .18); color: #ff9aa8; }
+
+/* Sayfa basligi: renkli ikon kutulari yerine sakin, tek tip */
+.page-head { margin-bottom: 24px; }
+.page-icon, .page-icon.blue, .page-icon.violet, .page-icon.green, .page-icon.orange, .page-icon.red { background: var(--card-2); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r); }
+.page-titles h1 { font-size: 22px; font-weight: 600; letter-spacing: -.015em; }
+.page-titles p { font-size: 13px; max-width: 72ch; }
+
+/* Segment: secili olan ters renk (turuncu ana eyleme kalsin) */
+.seg { background: var(--card); border-color: var(--line); border-radius: 10px; }
+.seg button { border-radius: 7px; color: #b9bcc3; }
+.seg button.active { background: var(--text); color: #141518; }
+.tabs-line button.active { border-bottom-color: var(--text); }
+
+/* Etiketler (chip) */
+.chip { border-radius: var(--r-xs); font-weight: 600; font-size: 11.5px; padding: 2px 7px; }
+.chip.ready, .chip.ship, .chip.partial, .chip.upd-new { background: rgba(160, 170, 190, .14); color: #cfd4de; }
+
+/* Tablolar */
+.ord-table { border-radius: var(--r); background: var(--card); }
+.ord-table th { background: transparent; font-weight: 500; color: var(--faint); padding: 11px 14px; }
+.ord-table td { padding: 12px 14px; border-bottom-color: #24272c; }
+.ord-table tbody tr:hover td { background: #212328; }
+.no-wrap { display: flex; align-items: center; gap: 8px; }
+.eye { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; border: 1px solid var(--line-2); background: var(--card-2); color: #c9cbd0; cursor: pointer; flex: none; }
+.eye svg { width: 16px; height: 16px; }
+.eye:hover { color: #141518; background: var(--text); border-color: var(--text); }
+
+/* Bugun */
+.step, .hcard, .alert, .next, .sheet-card, .artboard { border-radius: var(--r); background: var(--card); }
+.step-ic, .step-ic.c-blue, .step-ic.c-violet, .step-ic.c-green, .step-ic.c-orange { background: var(--card-2) !important; color: var(--text) !important; border: 1px solid var(--line-2); }
+.step.todo { border-color: rgba(255, 106, 0, .35); }
+.step.todo .step-no { background: var(--accent); color: var(--on-accent); }
+.step-big { font-weight: 600; letter-spacing: -.03em; }
+.setup { background: var(--card); border: 1px solid var(--line-2); box-shadow: inset 3px 0 0 var(--accent); }
+.next .next-ic { border-radius: 10px; }
+.next small, .od-sec h5, .sheet-day, .ask-title, .today-pill .tp-txt b { text-transform: none; letter-spacing: 0; }
+.next small { font-size: 12px; font-weight: 500; }
+.sum-cell b { font-weight: 600; }
+
+/* Baski sirasi: 4'lu izgara */
+.artboards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.artboard { width: auto; }
+@media (max-width: 1250px) { .artboards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.artboard-title { align-items: center; gap: 8px; flex-wrap: wrap; }
+.artboard-title > span { display: flex; align-items: center; gap: 8px; }
+.fill { border-radius: var(--r-xs); font-weight: 600; }
+
+/* Siparis onizleme paneli: solda buyuk tasarim (kesim mati), sagda bilgiler */
+.od { width: min(1180px, 86vw); background: var(--side); }
+.od-wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+.od-preview { overflow: auto; padding: 22px; display: flex; flex-direction: column; gap: 22px; align-items: center;
+  background-color: var(--mat);
+  background-image: linear-gradient(var(--mat-line) 1px, transparent 1px), linear-gradient(90deg, var(--mat-line) 1px, transparent 1px);
+  background-size: 24px 24px; border-right: 1px solid var(--line); }
+.od-art { margin: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.od-sheet { background: #fff; padding: 10px; border-radius: 3px; box-shadow: 0 18px 40px rgba(0, 0, 0, .45); display: flex; }
+.od-sheet img { display: block; max-width: 100%; max-height: calc(100vh - 210px); object-fit: contain; }
+.od-preview.multi .od-sheet img { max-height: 62vh; }
+.od-art figcaption { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
+.od-art figcaption b { color: var(--text); font-weight: 600; }
+.od-none { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
+.od-none b { color: var(--text); font-size: 15px; }
+.od-body { padding: 18px 20px 24px; }
+.od-head { background: var(--side); }
+.od-no { font-weight: 700; font-size: 24px; }
+.od-sec h5 { font-size: 12px; font-weight: 500; color: var(--faint); }
+.od-files { flex-direction: row; flex-wrap: wrap; }
+.od-file { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 8px 12px; border-radius: var(--r-sm); background: var(--card-2); border: 1px solid var(--line-2); color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+.od-file span { color: var(--muted); font-size: 12px; }
+.od-file:hover { border-color: #4a4f59; }
+.od-line { background: var(--card); border: 1px solid var(--line); }
+@media (max-width: 1150px) { .od-wrap { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } .od-preview { border-right: 0; border-bottom: 1px solid var(--line); } }
+
+/* Hazir sayfalar onizlemesi de mat uzerinde */
+.sheet-card .paper, .artboard .paper { box-shadow: 0 10px 24px rgba(0, 0, 0, .4); }
+
+/* Tercihler > kisayollar */
+.keys { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.keys > div { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.keys > div span { margin-left: 10px; color: #cfd2d8; }
+.pref-nav a.active { background: rgba(255, 106, 0, .1); color: #fff; box-shadow: inset 2px 0 0 var(--accent); }
+.pref-body input:focus, .pref-body select:focus, .ord-toolbar input[type=search]:focus { border-color: var(--accent); }
+.pref-body input[type=checkbox] { accent-color: var(--accent); }
+
+/* Bildirimler ve diyaloglar */
+.toast { border-radius: var(--r); background: #24272c; }
+.ask { border-radius: 14px; }
+.ask-ico { background: var(--card-2); color: var(--text); }
+.ask-title { font-size: 12.5px; font-weight: 500; }
+.ask-btns .btn.primary { color: var(--on-accent); }
+
+/* Gunun siparis rozeti etiketi */
+.today-pill .tp-txt b { font-size: 12.5px; font-weight: 600; color: #a9dcc6; }
+.paper .slot.card { background: #fff4ec; outline: 1px dashed var(--accent); }
+.paper .slot.card span { background: var(--accent); color: var(--on-accent); }
+.search-hint:hover { border-color: var(--line-2); }
+.kargo-table tr.sel td, .ord-table tr.sel td { background: rgba(255, 106, 0, .06) !important; }
+.kargo-table tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+input[type=checkbox] { accent-color: var(--accent); }
