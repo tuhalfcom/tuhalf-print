@@ -440,6 +440,8 @@ ipcMain.handle('order-info', async (_e, no) => {
   } catch (e) { out.fileError = e.message; }
   if (detailCache) out.order = (detailCache.data.orders || []).find((o) => o.no === no) || null;
   if (out.order) out.admin = shopAdminOrder(out.order.gid);
+  // Gonderim adresi (Shopify'daki guncel hali)
+  if (out.order && out.order.gid) { try { const a = await fetchOrderAddresses(config.data, [out.order.gid]); out.address = Object.values(a)[0] || null; } catch { /* */ } }
   try {
     const k = await loadKargo(false);
     out.cod = (k.cod || []).find((r) => Number(r.no) === no) || null;

@@ -1018,6 +1018,12 @@ async function openOrder(no) {
   if (d.hold) parts.push(`<div class="od-warn">⚠ ${esc(d.hold)} — baskı ve kargo bekletiliyor.</div>`);
   const nq = (row.items || []).reduce((a, i) => a + (Number(i.qty) || 1), 0) || d.files.reduce((a, f) => a + (Number(f.qty) || 1), 0);
   if (nq > 1) parts.push(`<div class="od-multi"><b>${nq} ürünlü sipariş</b><span>Hepsini birlikte basıp aynı pakete koyun; tek fişle gönderilir.</span></div>`);
+  // gonderim adresi
+  const A = d.address;
+  const adrTxt = A ? [A.name, [A.address1, A.address2].filter(Boolean).join(' '), [A.zip, A.city, A.province].filter(Boolean).join(' '), A.phone].filter(Boolean)
+    : d.cod ? [d.cod.ad, d.cod.adres, [d.cod.ilce, d.cod.il || d.cod.sehir].filter(Boolean).join(' / '), d.cod.telefon].filter(Boolean)
+    : d.geliver ? [d.geliver.name, d.geliver.address, [d.geliver.district, d.geliver.city].filter(Boolean).join(' / '), d.geliver.phone].filter(Boolean) : [];
+  if (adrTxt.length) parts.push(sec('Gönderim adresi', `<div class="od-addr">${adrTxt.map((x, i) => i === 0 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span>`).join('')}</div>`));
   // urunler
   if (row.items && row.items.length) parts.push(sec('Ürünler', `<ul class="od-items">${row.items.map((i) => `<li><b>${i.qty}×</b> ${esc(i.title)}${i.variant ? `<span class="muted"> / ${esc(i.variant)}</span>` : ''}</li>`).join('')}</ul>${row.total != null ? `<div class="od-total">${money(row.total)} · ${esc(row.shipping || '')}</div>` : ''}`));
   // baski dosyalari (buyuk onizleme solda)
@@ -1070,8 +1076,9 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('button, a, input, select, label, .ord-file, [data-path], [data-url], [data-show]')) return;
   const tr = e.target.closest('#ordRows tr, #kargoRows tr, #adresRows tr');
   if (!tr) return;
-  const noCell = tr.querySelector('.no');
-  const m = noCell && noCell.textContent.match(/#?(\d{3,})/);
+  const eyeB = tr.querySelector('[data-od]');
+  if (eyeB) { openOrder(eyeB.dataset.od); return; }
+  const m = (tr.querySelector('.no') || {}).textContent?.match(/#(\d{3,6})/);
   if (m) openOrder(m[1]);
 });
 

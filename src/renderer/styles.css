@@ -710,3 +710,17 @@ tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .ord-table td { border-bottom: 1px solid #33363e; }
 .ord-table tbody tr:hover td { background: #272a31 !important; }
 .ord-table tr.held td { background: rgba(242, 89, 108, .08) !important; }
+
+/* Onizleme paneli: daha kompakt (1.9.4) */
+.od { width: clamp(560px, 48vw, 820px); }
+.od-wrap { grid-template-columns: minmax(0, 1fr) 320px; }
+.od-preview { padding: 16px; gap: 16px; }
+.od-sheet { padding: 6px; }
+.od-sheet img { max-height: min(58vh, 560px); max-width: 100%; }
+.od-preview.multi .od-sheet img { max-height: min(44vh, 420px); }
+.od-head { padding: 14px 18px 12px; }
+.od-no { font-size: 21px; }
+.od-body { padding: 14px 16px 20px; gap: 12px; }
+.od-addr { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); user-select: text; }
+.od-addr span { color: #c9cbd0; font-size: 12.5px; }
+@media (max-width: 1000px) { .od { width: 94vw; } }
