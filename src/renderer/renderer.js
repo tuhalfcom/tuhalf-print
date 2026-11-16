@@ -116,7 +116,9 @@ async function loadOrders() {
 
 // ---------- Yerlesim ----------
 function paperHtml(sheet, items) {
-  const w = sheet.widthMm, h = sheet.lengthMm;
+  // Yazici son ogeden sonra keser: onizleme de basilacak uzunlukta gosterilir
+  const used = items.length ? Math.max(...items.map((i) => i.yMm + i.hMm)) + (CFG ? Number(CFG.print.marginMm) || 0 : 0) : sheet.lengthMm;
+  const w = sheet.widthMm, h = Math.min(sheet.lengthMm, Math.max(used, 50));
   const slots = items.map((i) => {
     const bg = i.thumb ? `background-image:url('${window.api.fileUrl(i.thumb)}');` : '';
     const box = `left:${(i.xMm / w) * 100}%;top:${(i.yMm / h) * 100}%;width:${(i.wMm / w) * 100}%;height:${(i.hMm / h) * 100}%;`;
@@ -125,7 +127,7 @@ function paperHtml(sheet, items) {
       ? `<div class="img" style="${bg}width:${(i.hMm / i.wMm) * 100}%;height:${(i.wMm / i.hMm) * 100}%;transform:translate(-50%,-50%) rotate(90deg)"></div>`
       : `<div class="img" style="${bg}width:100%;height:100%;left:0;top:0"></div>`;
     const q = i.card ? 0 : qtyOf(i.order);
-    return `<div class="slot${i.card ? ' card' : ''}${q > 1 ? ' multi' : ''}" style="${box}" title="${esc(i.name)}${q > 1 ? ` — bu siparişte ${q} ürün var` : ''}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}${q > 1 ? ` · ${q} ürün` : ''}</span></div>`;
+    return `<div class="slot${i.card ? ' card' : ''}${q > 1 ? ' is-multi' : ''}" style="${box}" title="${esc(i.name)}${q > 1 ? ` — bu siparişte ${q} ürün var` : ''}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}${q > 1 ? ` · ${q} ürün` : ''}</span></div>`;
   }).join('');
   return `<div class="paper" style="aspect-ratio:${w}/${h}">${slots}</div>`;
 }
@@ -153,14 +155,16 @@ async function loadPlan() {
   $('#waitingTitle').textContent = FORCE ? 'Bekleyenler de diziliyor' : `Bekleyen (${p.waiting.length})`;
   $('#waitingList').innerHTML = p.waiting.map((n) => `<span class="tag">${esc(n)}</span>`).join('') || (FORCE ? '<span class="muted small">Tüm tasarımlar sayfalara yerleşti.</span>' : '');
   // Doluluk: yazici tasarim bitince kestigi icin sayfanin KULLANILAN boyuna gore hesaplanir (609,6 x kullanilan uzunluk)
-  const fillOf = (s) => { const a = (s.widthMm || (CFG ? CFG.print.rollWidthMm : 0)) * (s.lengthMm || 0); return a ? Math.min(100, Math.round(100 * s.items.filter((i) => !i.card).reduce((x, i) => x + i.wMm * i.hMm, 0) / a)) : 0; };
+  // Yazici son tasarimdan sonra keser: basilan uzunluk = en alttaki ogenin bittigi yer + kenar boslugu
+  const usedLen = (s) => Math.min(s.lengthMm || Infinity, Math.max(0, ...s.items.map((i) => i.yMm + i.hMm)) + (CFG ? Number(CFG.print.marginMm) || 0 : 0));
+  const fillOf = (s) => { const a = (s.widthMm || (CFG ? CFG.print.rollWidthMm : 0)) * usedLen(s); return a ? Math.min(100, Math.round(100 * s.items.reduce((x, i) => x + i.wMm * i.hMm, 0) / a)) : 0; };
   const fills = p.sheets.map(fillOf);
   if (fills.length) $('#planSummary').textContent += ` · ortalama doluluk %${Math.round(fills.reduce((a, b) => a + b, 0) / fills.length)}`;
   let html = p.sheets.map((s, n) => {
     const designs = s.items.filter((i) => !i.card).length;
     const f = fills[n];
     return `<div class="artboard">
-      <div class="artboard-title"><b>Sayfa ${n + 1}</b><span>${designs} baskı${s.cards ? ` · ${s.cards} kart` : ''} <span class="fill ${f < 50 ? 'low' : f < 70 ? 'mid' : ''}" title="Tasarımların, basılacak alanda kapladığı yer (kartlar hariç). Yazıcı tasarım bitince kestiği için boş kalan uzunluk sayılmaz.">%${f} dolu · ${Math.round(s.lengthMm / 10)} cm</span></span></div>
+      <div class="artboard-title"><b>Sayfa ${n + 1}</b><span>${designs} baskı${s.cards ? ` · ${s.cards} kart` : ''} <span class="fill ${f < 50 ? 'low' : f < 70 ? 'mid' : ''}" title="Tasarım ve kartların, basılacak alanda kapladığı yer. Yazıcı son tasarımdan sonra kestiği için sayfanın kalanı sayılmaz.">%${f} dolu · ${Math.round(usedLen(s) / 10)} cm</span></span></div>
       ${paperHtml(s, s.items)}
     </div>`;
   }).join('');

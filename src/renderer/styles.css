@@ -519,8 +519,8 @@ kbd { font: 11px/1 "Segoe UI", system-ui, sans-serif; padding: 3px 6px; border-r
 
 /* =====================================================================
    Tasarim katmani 2.0 — "baski atolyesi"
-   Grafit calisma masasi; tek marka rengi Tuhalf turuncusu sadece ana eylemde ve
-   secili menude. Durumlar: yesil (tamam), kehribar (bekliyor), kirmizi (sorun).
+   Grafit calisma masasi; tek vurgu rengi indigo (marka degil, kullanici odakli:
+   durum renkleriyle karismaz) sadece ana eylemde ve secili menude. Durumlar: yesil (tamam), kehribar (bekliyor), kirmizi (sorun).
    Tasarimlar (baski dosyalari) kesim matina benzeyen ince izgarali zeminde gosterilir.
    Yazi: IBM Plex Sans (matbaa/endustri karakteri, Turkce harfler tam).
    ===================================================================== */
@@ -545,9 +545,9 @@ kbd { font: 11px/1 "Segoe UI", system-ui, sans-serif; padding: 3px 6px; border-r
   --text: #ecebe7;
   --muted: #9a9da5;
   --faint: #676b74;
-  --accent: #ff6a00;        /* Tuhalf turuncusu: sadece ana eylem + secili menu */
-  --accent-2: #ff8326;
-  --on-accent: #1b0c00;
+  --accent: #4f6bed;        /* indigo: durum renkleriyle (yesil/kehribar/kirmizi/sari) asla karismaz */
+  --accent-2: #6580ff;
+  --on-accent: #ffffff;
   --ok: #3ecf8e;
   --warn: #f2a93b;
   --err: #f2596c;
@@ -573,11 +573,11 @@ body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacin
 .side { padding: 14px 10px; }
 .nav-group { margin: 18px 12px 6px; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--faint); }
 .nav-item { height: 38px; color: #c9cbd0; border-radius: var(--r-sm); }
-.nav-item.active { background: rgba(255, 106, 0, .09); color: #fff; }
+.nav-item.active { background: rgba(79, 107, 237, .09); color: #fff; }
 .nav-item.active svg { color: var(--accent); }
 .nav-item.active::before { background: var(--accent); }
 .nav-badge { background: #2d3036; color: #dcdde1; border-radius: 6px; height: 19px; }
-.nav-badge.blue { background: rgba(255, 106, 0, .16); color: #ffb27a; }
+.nav-badge.blue { background: rgba(79, 107, 237, .16); color: #aebcff; }
 .nav-badge.red { background: rgba(242, 89, 108, .18); color: #ff9aa8; }
 
 /* Sayfa basligi: renkli ikon kutulari yerine sakin, tek tip */
@@ -609,7 +609,7 @@ body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacin
 /* Bugun */
 .step, .hcard, .alert, .next, .sheet-card, .artboard { border-radius: var(--r); background: var(--card); }
 .step-ic, .step-ic.c-blue, .step-ic.c-violet, .step-ic.c-green, .step-ic.c-orange { background: var(--card-2) !important; color: var(--text) !important; border: 1px solid var(--line-2); }
-.step.todo { border-color: rgba(255, 106, 0, .35); }
+.step.todo { border-color: rgba(79, 107, 237, .35); }
 .step.todo .step-no { background: var(--accent); color: var(--on-accent); }
 .step-big { font-weight: 600; letter-spacing: -.03em; }
 .setup { background: var(--card); border: 1px solid var(--line-2); box-shadow: inset 3px 0 0 var(--accent); }
@@ -659,7 +659,7 @@ body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacin
 .keys { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .keys > div { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .keys > div span { margin-left: 10px; color: #cfd2d8; }
-.pref-nav a.active { background: rgba(255, 106, 0, .1); color: #fff; box-shadow: inset 2px 0 0 var(--accent); }
+.pref-nav a.active { background: rgba(79, 107, 237, .1); color: #fff; box-shadow: inset 2px 0 0 var(--accent); }
 .pref-body input:focus, .pref-body select:focus, .ord-toolbar input[type=search]:focus { border-color: var(--accent); }
 .pref-body input[type=checkbox] { accent-color: var(--accent); }
 
@@ -675,7 +675,7 @@ body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacin
 .paper .slot.card { background: #fff4ec; outline: 1px dashed var(--accent); }
 .paper .slot.card span { background: var(--accent); color: var(--on-accent); }
 .search-hint:hover { border-color: var(--line-2); }
-.kargo-table tr.sel td, .ord-table tr.sel td { background: rgba(255, 106, 0, .06) !important; }
+.kargo-table tr.sel td, .ord-table tr.sel td { background: rgba(79, 107, 237, .06) !important; }
 .kargo-table tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 input[type=checkbox] { accent-color: var(--accent); }
 
@@ -684,8 +684,23 @@ input[type=checkbox] { accent-color: var(--accent); }
 tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .kargo-table tr.is-multi td:nth-child(2) { box-shadow: none; }
 .kargo-table tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
-.paper .slot.multi { outline: 2px solid #ffd23f; outline-offset: -2px; z-index: 1; }
-.paper .slot.multi span { background: #ffd23f; color: #1a1300; }
+.paper .slot.is-multi { outline: 2px solid #ffd23f; outline-offset: -2px; z-index: 1; }
+.paper .slot.is-multi span { background: #ffd23f; color: #1a1300; }
 .od-multi { display: flex; flex-direction: column; gap: 2px; padding: 11px 14px; border-radius: 10px; background: rgba(255, 210, 63, .12); border: 1px solid rgba(255, 210, 63, .55); }
 .od-multi b { color: #ffd23f; font-size: 14.5px; }
 .od-multi span { color: #e9dfb8; font-size: 12.5px; }
+
+/* Duzeltmeler (1.9.2) */
+.paper .slot.card { background: #eef1ff; outline-color: var(--accent); }
+.ord-table td:nth-child(2) { white-space: nowrap; }
+.kargo-table td:last-child > div, .kargo-table td:last-child { white-space: normal; }
+.kargo-table td:last-child { text-align: right; }
+.kargo-table td:last-child .btn { margin: 2px 0 2px 6px; }
+.step .btn.primary { background: var(--card-2); border-color: var(--line-2); color: var(--text); }
+.step.todo .btn.primary { background: transparent; border-color: rgba(79, 107, 237, .6); color: #c9d2ff; }
+.od { width: clamp(640px, 64vw, 980px); }
+.od-wrap { grid-template-columns: minmax(0, 1fr) 340px; }
+.od-sheet img { max-height: calc(100vh - 230px); }
+.od-preview { padding: 18px; }
+@media (max-width: 1000px) { .od { width: 92vw; } .od-wrap { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } }
+@media (min-width: 1001px) and (max-width: 1150px) { .od-wrap { grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: none; } .od-preview { border-right: 1px solid var(--line); border-bottom: 0; } }
