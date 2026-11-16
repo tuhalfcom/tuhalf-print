@@ -704,3 +704,9 @@ tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .od-preview { padding: 18px; }
 @media (max-width: 1000px) { .od { width: 92vw; } .od-wrap { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } }
 @media (min-width: 1001px) and (max-width: 1150px) { .od-wrap { grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: none; } .od-preview { border-right: 1px solid var(--line); border-bottom: 0; } }
+
+/* Satirlari ayirt etmek icin zebra (her ikinci satir hafif acik) + belirgin ayirici */
+.ord-table tbody tr:nth-child(even) td { background: #25282e; }
+.ord-table td { border-bottom: 1px solid #33363e; }
+.ord-table tbody tr:hover td { background: #272a31 !important; }
+.ord-table tr.held td { background: rgba(242, 89, 108, .08) !important; }
