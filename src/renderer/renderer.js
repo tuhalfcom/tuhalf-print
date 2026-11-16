@@ -325,6 +325,24 @@ let ORD = { rows: [] }, ORD_FILTER = 'all';
 const FIN = { PAID: 'Ödendi', PENDING: 'Ödenmedi', AUTHORIZED: 'Onaylandı', PARTIALLY_PAID: 'Kısmen ödendi', REFUNDED: 'İade edildi', PARTIALLY_REFUNDED: 'Kısmen iade', VOIDED: 'İptal', EXPIRED: 'Süresi doldu' };
 const FUL = { FULFILLED: 'Gönderildi', UNFULFILLED: 'Gönderilmedi', PARTIALLY_FULFILLED: 'Kısmen gönderildi', IN_PROGRESS: 'Hazırlanıyor', ON_HOLD: 'Beklemede', SCHEDULED: 'Planlandı', OPEN: 'Açık', PENDING_FULFILLMENT: 'Bekliyor', RESTOCKED: 'Stoğa döndü' };
 const isCod = (g) => (g || []).some((x) => /cash on delivery|cod\b|kap[ıi]da/i.test(x));
+// Odeme yontemi grubu (filtre icin)
+function payCat(o) {
+  const g = (o.gateways || []).join(' ');
+  if (isCod(o.gateways)) return 'cod';
+  if (/paytr|kredi|kart|card|iyzico|stripe|shopify.?payments|param/i.test(g)) return 'card';   // "Banka Kartı" karttir
+  if (/havale|eft|banka|bank|transfer|manual|elden/i.test(g)) return 'havale';
+  return 'other';
+}
+let ORD_PAY = 'all', ORD_RANGE = '14', OPAGE = 1, OSIZE = 25;
+try { OSIZE = Number(localStorage.getItem('ordPageSize')) || 25; ORD_RANGE = localStorage.getItem('ordRange') || '14'; } catch { /* */ }
+const RANGE_FETCH = { today: 2, yesterday: 2 };
+function inOrdRange(t) {
+  if (!t) return ORD_RANGE !== 'today' && ORD_RANGE !== 'yesterday';
+  const x = Date.parse(t); const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  if (ORD_RANGE === 'today') return x >= d0.getTime();
+  if (ORD_RANGE === 'yesterday') return x >= d0.getTime() - 864e5 && x < d0.getTime();
+  return x >= Date.now() - (Number(ORD_RANGE) || 14) * 864e5;
+}
 function payCell(o) {
   if (!o.financial) return '<span class="muted">—</span>';
   const cod = isCod(o.gateways), st = FIN[o.financial] || o.financial;
@@ -349,10 +367,15 @@ function renderOrdersPage() {
   const rows = ORD.rows.filter((o) => {
     const ps = printState(o).key;
     if (ORD_FILTER !== 'all' && ps !== ORD_FILTER) return false;
+    if (!inOrdRange(o.createdAt)) return false;
+    if (ORD_PAY !== 'all' && payCat(o) !== ORD_PAY) return false;
     if (!q) return true;
     return [String(o.no), o.name, o.city, o.shipping, ...(o.local ? o.local.files.map((f) => f.name) : [])].join(' ').toLocaleLowerCase('tr').includes(q);
   });
-  $('#ordRows').innerHTML = rows.map((o) => {
+  const pages = Math.max(1, Math.ceil(rows.length / OSIZE));
+  if (OPAGE > pages) OPAGE = pages;
+  $('#ordPager').innerHTML = pagerHtml({ total: rows.length, pages }, OPAGE, OSIZE);
+  $('#ordRows').innerHTML = rows.slice((OPAGE - 1) * OSIZE, OPAGE * OSIZE).map((o) => {
     const ps = printState(o);
     const files = o.local ? o.local.files.map((f) => `<div class="ord-file" data-path="${esc(f.path)}" title="Klasörde göster">${f.isNew ? '<span class="new-dot" title="Yeni"></span>' : ''}<span class="tag">${esc(f.size || '?')}</span><span class="fname">${esc(f.name)}</span></div>`).join('') : '';
     const items = !files && o.items && o.items.length ? `<div class="sub">${o.items.map((i) => esc(`${i.qty}× ${i.title}${i.variant ? ' / ' + i.variant : ''}`)).join('<br>')}</div>` : '';
@@ -367,12 +390,13 @@ function renderOrdersPage() {
       <td>${ps.html}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="8" class="muted">Gösterilecek sipariş yok.</td></tr>';
-  const cnt = (k) => ORD.rows.filter((o) => printState(o).key === k).length;
-  $('#ordInfo').textContent = `${ORD.rows.length} sipariş · ${cnt('unprinted')} basılmadı · ${cnt('hold')} ödeme bekliyor` + (ORD.fetchedAt ? ` · Shopify ${fmtTime(ORD.fetchedAt)}` : '');
+  const inR = ORD.rows.filter((o) => inOrdRange(o.createdAt));
+  const cnt = (k) => inR.filter((o) => printState(o).key === k).length;
+  $('#ordInfo').textContent = `${inR.length} sipariş · ${cnt('unprinted')} basılmadı · ${cnt('hold')} ödeme bekliyor` + (ORD.fetchedAt ? ` · Shopify ${fmtTime(ORD.fetchedAt)}` : '');
 }
 async function loadOrdersPage(force, markSeen) {
   if (!ORD.rows.length) $('#ordRows').innerHTML = '<tr><td colspan="8" class="muted">Siparişler yükleniyor…</td></tr>';
-  const r = await window.api.ordersDetail(force);
+  const r = await window.api.ordersDetail(force, RANGE_FETCH[ORD_RANGE] || Number(ORD_RANGE) || 14);
   ORD = r;
   const notes = [];
   if (r.error) notes.push(r.error);
@@ -382,7 +406,29 @@ async function loadOrdersPage(force, markSeen) {
   renderOrdersPage();
   if (markSeen) { await window.api.ordersSeen(); loadOrders(); }
 }
-$('#ordSearch').oninput = () => renderOrdersPage();
+$('#ordSearch').oninput = () => { OPAGE = 1; renderOrdersPage(); };
+$('#ordRange').value = ORD_RANGE;
+$('#ordRange').onchange = (e) => { ORD_RANGE = e.target.value; OPAGE = 1; try { localStorage.setItem('ordRange', ORD_RANGE); } catch { /* */ } renderOrdersPage(); loadOrdersPage(false); };
+$('#ordPay').onchange = (e) => { ORD_PAY = e.target.value; OPAGE = 1; renderOrdersPage(); };
+$('#ordPager').onclick = (e) => { const b = e.target.closest('[data-pg]'); if (!b || b.disabled) return; OPAGE = Number(b.dataset.pg); renderOrdersPage(); document.querySelector('#view-orders .ord-table').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+$('#ordPager').onchange = (e) => { if (!e.target.matches('[data-pgsize]')) return; OSIZE = Number(e.target.value) || 25; OPAGE = 1; try { localStorage.setItem('ordPageSize', String(OSIZE)); } catch { /* */ } renderOrdersPage(); };
+// ---------- Gunun siparis sayisi (Bugun, Siparisler, Kargo fisleri basliklarinda) ----------
+let TODAY = null;
+async function loadToday(force) {
+  try { const r = await window.api.todayStats(force); if (r && !r.error) TODAY = r; renderToday(r && r.error); } catch { /* */ }
+}
+function renderToday(err) {
+  for (const el of document.querySelectorAll('[data-today]')) {
+    if (!TODAY) { el.querySelector('.tp-num').textContent = '–'; el.querySelector('small').textContent = err ? 'Shopify bağlı değil' : 'yükleniyor…'; continue; }
+    const d = TODAY.today - TODAY.yesterdaySoFar;
+    el.querySelector('.tp-num').textContent = TODAY.today;
+    el.classList.toggle('up', d > 0); el.classList.toggle('down', d < 0);
+    el.querySelector('small').innerHTML = `${money(TODAY.revenue)} <span class="tp-sep">·</span> <span class="tp-delta">${d > 0 ? '▲ ' + d : d < 0 ? '▼ ' + Math.abs(d) : '='}</span> dün bu saate göre`;
+    el.title = `Bugün ${TODAY.today} sipariş · dün bu saate kadar ${TODAY.yesterdaySoFar}, dün toplam ${TODAY.yesterday} (iptaller hariç) · ${fmtTime(TODAY.at)}`;
+  }
+}
+loadToday();
+setInterval(() => loadToday(), 3 * 60000);
 $('#ordFilter').onclick = (e) => {
   const b = e.target.closest('button[data-f]'); if (!b) return;
   ORD_FILTER = b.dataset.f;
@@ -413,16 +459,16 @@ function pageRows(rows) {
   if (KPAGE < 1) KPAGE = 1;
   return { list: rows.slice((KPAGE - 1) * KSIZE, KPAGE * KSIZE), pages, total: rows.length };
 }
-function renderPager(pg) {
-  const el = $('#kargoPager');
-  if (!pg.total) { el.innerHTML = ''; return; }
-  const from = (KPAGE - 1) * KSIZE + 1, to = Math.min(pg.total, KPAGE * KSIZE);
+function pagerHtml(pg, page, size) {
+  if (!pg.total) return '';
+  const from = (page - 1) * size + 1, to = Math.min(pg.total, page * size);
   const nums = [];
-  for (let i = 1; i <= pg.pages; i++) if (i === 1 || i === pg.pages || Math.abs(i - KPAGE) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
-  el.innerHTML = `<div class="pg-info">${from}–${to} / ${pg.total} sipariş</div>
-    <div class="pg-nav">${pg.pages > 1 ? `<button class="pg-btn" data-pg="${KPAGE - 1}" ${KPAGE === 1 ? 'disabled' : ''} title="Önceki sayfa">‹</button>${nums.map((n) => (n === '…' ? '<span class="pg-gap">…</span>' : `<button class="pg-btn ${n === KPAGE ? 'active' : ''}" data-pg="${n}">${n}</button>`)).join('')}<button class="pg-btn" data-pg="${KPAGE + 1}" ${KPAGE === pg.pages ? 'disabled' : ''} title="Sonraki sayfa">›</button>` : ''}</div>
-    <label class="pg-size">Sayfada <select id="kargoPageSize">${[10, 25, 50, 100].map((n) => `<option value="${n}" ${n === KSIZE ? 'selected' : ''}>${n}</option>`).join('')}</select> sipariş</label>`;
+  for (let i = 1; i <= pg.pages; i++) if (i === 1 || i === pg.pages || Math.abs(i - page) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
+  return `<div class="pg-info">${from}–${to} / ${pg.total} sipariş</div>
+    <div class="pg-nav">${pg.pages > 1 ? `<button class="pg-btn" data-pg="${page - 1}" ${page === 1 ? 'disabled' : ''} title="Önceki sayfa">‹</button>${nums.map((n) => (n === '…' ? '<span class="pg-gap">…</span>' : `<button class="pg-btn ${n === page ? 'active' : ''}" data-pg="${n}">${n}</button>`)).join('')}<button class="pg-btn" data-pg="${page + 1}" ${page === pg.pages ? 'disabled' : ''} title="Sonraki sayfa">›</button>` : ''}</div>
+    <label class="pg-size">Sayfada <select data-pgsize>${[10, 25, 50, 100].map((n) => `<option value="${n}" ${n === size ? 'selected' : ''}>${n}</option>`).join('')}</select> sipariş</label>`;
 }
+function renderPager(pg) { $('#kargoPager').innerHTML = pagerHtml(pg, KPAGE, KSIZE); }
 const KSEL = new Set();
 const money = (n) => (n == null ? '—' : Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺');
 const fmtD = (t) => { if (!t) return '—'; const d = new Date(t); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
@@ -591,7 +637,7 @@ async function refreshKargoBtn(b) {
   finally { b.disabled = false; b.lastChild.textContent = label; }
 }
 $('#kargoPager').onclick = (e) => { const b = e.target.closest('[data-pg]'); if (!b || b.disabled) return; KPAGE = Number(b.dataset.pg); renderKargo(); $('#view-kargo').scrollTop = 0; document.querySelector('.kargo-table').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
-$('#kargoPager').onchange = (e) => { if (e.target.id !== 'kargoPageSize') return; KSIZE = Number(e.target.value) || 25; KPAGE = 1; try { localStorage.setItem('kargoPageSize', String(KSIZE)); } catch { /* */ } renderKargo(); };
+$('#kargoPager').onchange = (e) => { if (!e.target.matches('[data-pgsize]')) return; KSIZE = Number(e.target.value) || 25; KPAGE = 1; try { localStorage.setItem('kargoPageSize', String(KSIZE)); } catch { /* */ } renderKargo(); };
 $('#btnKargoRefresh').onclick = () => refreshKargoBtn($('#btnKargoRefresh'));
 $('#btnAdresRefresh').onclick = () => refreshKargoBtn($('#btnAdresRefresh'));
 $('#kargoRows').onchange = $('#kargoHead').onchange = (e) => {
@@ -786,7 +832,7 @@ window.api.on('update', (u) => { UPD = u; renderUpdate(); });
 
 window.api.on('status', (s) => { const wasJob = STATUS.job; STATUS = s; renderStatus(); renderUpdate(); if (wasJob && !s.job) refreshAll(); });
 window.api.on('log', addLog);
-window.api.on('refresh', refreshAll);
+window.api.on('refresh', () => { refreshAll(); loadToday(); });
 
 (async () => {
   const d = await window.api.init();

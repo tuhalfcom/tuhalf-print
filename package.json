@@ -1,7 +1,7 @@
 {
   "name": "tuhalf-print",
   "productName": "Tuhalf Print",
-  "version": "1.7.4",
+  "version": "1.8.0",
   "description": "Tuhalf siparis baski dosyalarini indirir, rulo sayfalara dizer ve Photoshop ile basar.",
   "author": "Tuhalf",
   "main": "src/main/main.js",

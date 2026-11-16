@@ -373,13 +373,14 @@ ipcMain.handle('check-now', () => checkNow());
 // ---------- Siparisler sayfasi ----------
 let detailCache = null; // { at, data }
 ipcMain.handle('orders-seen', () => { state.data.ordersSeenAt = Date.now(); state.save(); return true; });
-ipcMain.handle('orders-detail', async (_e, force) => {
+ipcMain.handle('orders-detail', async (_e, force, daysArg) => {
+  const days = Math.min(90, Math.max(1, Number(daysArg) || 14));
   const root = downloadDir();
   // Yerel dosyalar: siparis no -> dosyalar ve baski durumu
   const local = new Map();
   if (root && fs.existsSync(root)) {
     const idx = F.sheetIndex(root, state.data.printed);
-    for (const g of F.listOrders(root, 30)) for (const f of g.files) {
+    for (const g of F.listOrders(root, Math.max(30, days + 2))) for (const f of g.files) {
       const no = f.info && f.info.order; if (!no) continue;
       const sh = idx.get(f.name) || [];
       const printed = f.status === 'arranged' && sh.length > 0 && sh.every((x) => x.printedAt);
@@ -391,7 +392,7 @@ ipcMain.handle('orders-detail', async (_e, force) => {
   const c = config.data;
   if (c.shop && c.clientId && c.clientSecret) {
     try {
-      if (force || !detailCache || Date.now() - detailCache.at > 60000) detailCache = { at: Date.now(), data: await fetchOrderDetails(c, 14) };
+      if (force || !detailCache || detailCache.days < days || Date.now() - detailCache.at > 60000) detailCache = { at: Date.now(), days, data: await fetchOrderDetails(c, days) };
       remote = detailCache.data.orders; pii = detailCache.data.pii;
     } catch (e) { error = e.message; }
   } else error = 'Shopify bilgileri girilmemiş; sadece indirilen dosyalar gösteriliyor.';
@@ -401,6 +402,28 @@ ipcMain.handle('orders-detail', async (_e, force) => {
   for (const [no, l] of local) if (!rows.has(no)) rows.set(no, { no, hold: holdOf(no), name: '', createdAt: null, financial: '', fulfillment: '', gateways: [], shipping: '', total: null, currency: '', items: [], local: l, onlyLocal: true });
   const list = Array.from(rows.values()).sort((a, b) => b.no - a.no);
   return { rows: list, error, pii, fetchedAt: detailCache ? detailCache.at : null };
+});
+
+// ---------- Gunun siparis sayisi (Bugun / Siparisler / Kargo fisleri basliklarinda) ----------
+let statsCache = null;
+ipcMain.handle('today-stats', async (_e, force) => {
+  const c = config.data;
+  if (!(c.shop && c.clientId && c.clientSecret)) return { error: 'Shopify bağlı değil' };
+  try {
+    let orders;
+    if (detailCache && Date.now() - detailCache.at < 3 * 60000 && detailCache.days >= 2) orders = detailCache.data.orders;
+    else {
+      if (force || !statsCache || Date.now() - statsCache.at > 3 * 60000) statsCache = { at: Date.now(), data: await fetchOrderDetails(c, 2) };
+      orders = statsCache.data.orders;
+    }
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    const t0 = d0.getTime(), y0 = t0 - 864e5, nowOfDay = Date.now() - t0;
+    const live = orders.filter((o) => !o.cancelled && o.createdAt);
+    const today = live.filter((o) => Date.parse(o.createdAt) >= t0);
+    const yest = live.filter((o) => { const x = Date.parse(o.createdAt); return x >= y0 && x < t0; });
+    const yestSoFar = yest.filter((o) => Date.parse(o.createdAt) - y0 <= nowOfDay).length;
+    return { today: today.length, revenue: today.reduce((a, o) => a + (Number(o.total) || 0), 0), yesterday: yest.length, yesterdaySoFar: yestSoFar, at: Date.now() };
+  } catch (e) { return { error: e.message }; }
 });
 
 // ---------- Kargo fisleri ----------
