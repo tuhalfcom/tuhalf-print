@@ -18,6 +18,7 @@ const PS = require('./photoshop');
 const { createUpdater } = require('./updater');
 const { parseName } = require('./naming');
 const K = require('./kargo');
+const Shared = require('./shared');
 
 const ROOT = path.join(__dirname, '..', '..');
 const ICON = path.join(ROOT, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
@@ -43,6 +44,7 @@ function defaults() {
     card: { enabled: true, file: '', wMm: 0, hMm: 0, maxPerSheet: 0 },
     kargo: { geliverToken: '', codUrl: 'https://tuhalf-etiket.tuhalfcom.workers.dev', codKey: '', printer: '', days: 14 },
     photoshopPath: '', schema: 4,
+    station: '', roles: { download: true }, sound: true,
   };
 }
 
@@ -148,17 +150,26 @@ async function checkNow(opts = {}) {
   if (status.running) log('warn', 'Önceki kontrol yanıt vermedi; yeniden başlatılıyor.');
   const runId = (status.runId || 0) + 1;
   status.running = true; status.runId = runId; status.runStart = Date.now(); status.lastError = null; pushStatus();
+  syncShared();
   const done = new Set(state.data.downloaded || []);
   try {
     const redo = Number(opts.redownloadFrom) || 0;
+    if (!redo && config.data.roles && config.data.roles.download === false) {
+      // Bu bilgisayar indirme yapmiyor (indirmeyi ana bilgisayar yapar); ortak klasordeki dosyalari kullanir
+      try { await refreshHeld(); } catch { /* */ }
+      log('info', 'Bu bilgisayar indirme yapmıyor; ortak klasördeki dosyalar kullanılıyor.');
+      send('refresh');
+      return { files: [], pending: [], skippedRole: true };
+    }
     log('info', redo ? `#${redo} ve sonraki siparişler yeniden indiriliyor…` : 'Yeni siparişler kontrol ediliyor…');
-    const cfg = redo ? { ...config.data, redownloadFrom: redo, lookbackDays: Math.max(120, config.data.lookbackDays || 0) }
+    const cfg = redo ? { ...config.data, redownloadFrom: redo, redownloadOnly: opts.only || 0, lookbackDays: Math.max(120, config.data.lookbackDays || 0) }
       : { ...config.data, ignoreBefore: state.data.resetAt || 0 };
     const r = await runDownload(cfg, done, log);
     retryIn = r.retryInMs || 0;   // yeni siparisin dosyasi hazir olunca beklemeden tekrar bak
     updatePay(r.payments);
     try { await refreshHeld(new Set((r.payments || []).map((p) => p.no))); } catch (e) { log('warn', 'Ödeme durumu kontrol edilemedi: ' + e.message); }
-    state.set({ downloaded: Array.from(done).slice(-5000) });
+    state.set({ downloaded: Array.from(done).slice(-8000) });
+    syncShared();
     if (redo) {
       log('ok', `Yeniden indirme bitti: ${r.files.length} dosya indi` + (r.skipped ? `, ${r.skipped} dosya zaten vardı` : '') + (r.files.length ? ` → ${r.folderName}` : '') + '.');
       if (r.files.length) send('refresh');
@@ -195,6 +206,37 @@ function downloadDir() {
   const alt = path.join(app.getPath('desktop'), 'BASKI');
   return fs.existsSync(alt) ? alt : d;
 }
+// ---------- Ortak durum (cok bilgisayar) ----------
+const stationName = () => (config.data.station || os.hostname() || 'Bilgisayar').trim();
+let sharedCache = null, sharedMtime = 0, sharedWarnAt = 0;
+function syncShared() {
+  const root = downloadDir();
+  if (!root || !fs.existsSync(root)) return false;
+  const sig = () => JSON.stringify([state.data.printed, state.data.labelsPrinted, state.data.arranged, (state.data.downloaded || []).length]);
+  try {
+    const before = sig();
+    const L = { downloaded: state.data.downloaded || [], printed: state.data.printed || {}, printedOff: state.data.printedOff || {},
+      labels: state.data.labelsPrinted || {}, labelsOff: state.data.labelsOff || {}, arranged: state.data.arranged || {}, arrangedAt: state.data.arrangedAt || 0 };
+    const { S, L: out } = Shared.merge(Shared.read(root), L, { root, station: stationName(), roles: config.data.roles || {}, version: app.getVersion() });
+    Shared.write(root, S);
+    sharedMtime = Shared.mtime(root); sharedCache = S;
+    Object.assign(state.data, { downloaded: out.downloaded.slice(-8000), printed: out.printed, printedOff: out.printedOff, printedBy: out.printedBy,
+      labelsPrinted: out.labels, labelsOff: out.labelsOff, labelsBy: out.labelsBy, arranged: out.arranged, arrangedAt: out.arrangedAt });
+    state.save();
+    return before !== sig();
+  } catch (e) {
+    if (Date.now() - sharedWarnAt > 30 * 60000) { sharedWarnAt = Date.now(); log('warn', 'Ortak durum dosyası güncellenemedi: ' + e.message); }
+    return false;
+  }
+}
+// Diger bilgisayarlarin degisikliklerini yakala (ortak dosya degistiyse)
+setInterval(() => {
+  const root = downloadDir();
+  if (!root || !fs.existsSync(root)) return;
+  const m = Shared.mtime(root);
+  if (m && m !== sharedMtime && syncShared()) { kargoCache = null; send('refresh'); send('kargo-updated'); }
+}, 20000);
+
 function cardCfg() {
   const c = config.data.card || {};
   if (!c.enabled || !c.file || !fs.existsSync(c.file) || !(c.wMm > 0) || !(c.hMm > 0)) return null;
@@ -224,6 +266,12 @@ function plan(force) {
 
 async function buildSheets(force) {
   if (status.job) throw new Error('Başka bir işlem sürüyor.');
+  const root = downloadDir();
+  const lk = Shared.lock(root, 'sayfa-hazirlama', stationName());
+  if (!lk.ok) throw new Error(`Şu an “${lk.by}” bilgisayarı sayfa hazırlıyor. Bitince tekrar deneyin (aynı tasarım iki kez dizilmesin diye).`);
+  try { syncShared(); return await buildSheetsInner(force); } finally { Shared.unlock(root, 'sayfa-hazirlama', stationName()); }
+}
+async function buildSheetsInner(force) {
   const pl = plan(force);
   if (!pl.sheets.length) return { sheets: [], waiting: pl.waiting.length };
   const outDir = path.join(pl.newestFolder, '_Sayfalar');
@@ -264,7 +312,8 @@ async function buildSheets(force) {
       const info = parseName(name);
       if (!info || arranged[name] >= info.qty) { F.moveToArranged(file); delete arranged[name]; }
     }
-    state.data.arranged = arranged; state.save();
+    state.data.arranged = arranged; state.data.arrangedAt = Date.now(); state.save();
+    syncShared();
     for (const s of res.sheets) if (!s.ok) log('error', `${s.title}: ${s.errors.join('; ')}`);
     log('ok', `${okTitles.size} sayfa PSD olarak hazır, Photoshop'ta açık. Kontrol edip Print'e basın.`);
     if (pl.waiting.length) log('info', `Bekleyen ${pl.waiting.length} tasarım sonraki siparişlerle dizilecek: ${pl.waiting.join(', ')}`);
@@ -289,12 +338,15 @@ async function printSheets(paths) {
     const res = await PS.runJob(config.data.photoshopPath, JSX('print.jsx'), { files: paths }, (d, t, l) => {
       status.job = { ...status.job, done: d, total: t, label: 'Yazdırılıyor: ' + l }; pushStatus();
     });
+    syncShared();
     const printed = { ...(state.data.printed || {}) };
+    const off = { ...(state.data.printedOff || {}) };
     for (const f of res.files) {
-      if (f.ok) { printed[f.path] = Date.now(); log('ok', 'Yazdırıldı: ' + path.basename(f.path)); }
+      if (f.ok) { printed[f.path] = Date.now(); delete off[f.path]; log('ok', 'Yazdırıldı: ' + path.basename(f.path)); }
       else log('error', `${path.basename(f.path)} yazdırılamadı: ${f.error}`);
     }
-    state.set({ printed });
+    state.data.printed = printed; state.data.printedOff = off; state.save();
+    syncShared();
     return res;
   } finally { status.job = null; pushStatus(); send('refresh'); }
 }
@@ -366,10 +418,60 @@ ipcMain.handle('sheets', () => {
   return F.listSheets(downloadDir()).slice(0, 40).map((s) => {
     const cardThumb = config.data.card && config.data.card.file && fs.existsSync(config.data.card.file) ? thumb(config.data.card.file) : null;
     if (s.meta) for (const i of s.meta.items) { if (i.card) { i.thumb = cardThumb; continue; } const p = thumbs.get(i.fileName); i.thumb = p ? thumb(p) : null; }
-    return { ...s, printedAt: (state.data.printed || {})[s.path] || null };
+    return { ...s, printedAt: (state.data.printed || {})[s.path] || null, printedBy: (state.data.printedBy || {})[s.path] || '' };
   });
 });
 ipcMain.handle('check-now', () => checkNow());
+// Siparis detay paneli: tek sipariste dosyalar, sayfalar, odeme, kargo ve adres bir arada
+ipcMain.handle('order-info', async (_e, no) => {
+  no = Number(no);
+  const root = downloadDir();
+  const out = { no, files: [], sheets: [], pay: (state.data.pay || {})[no] || null, hold: holdOf(no), order: null, cod: null, geliver: null, addrError: null, admin: '' };
+  try {
+    if (root && fs.existsSync(root)) {
+      const idx = F.sheetIndex(root, state.data.printed);
+      const seen = new Set();
+      for (const g of F.listOrders(root, 90)) for (const f of g.files) {
+        if (!f.info || f.info.order !== no) continue;
+        out.files.push({ name: f.name, path: f.path, folder: g.name, size: f.info.size, color: f.info.color, qty: f.info.qty, status: f.status, thumb: thumb(f.path) });
+        for (const sh of idx.get(f.name) || []) if (!seen.has(sh.path)) { seen.add(sh.path); out.sheets.push({ ...sh, printedBy: (state.data.printedBy || {})[sh.path] || '' }); }
+      }
+    }
+  } catch (e) { out.fileError = e.message; }
+  if (detailCache) out.order = (detailCache.data.orders || []).find((o) => o.no === no) || null;
+  if (out.order) out.admin = shopAdminOrder(out.order.gid);
+  try {
+    const k = await loadKargo(false);
+    out.cod = (k.cod || []).find((r) => Number(r.no) === no) || null;
+    out.geliver = (k.geliver || []).find((r) => Number(r.no) === no) || null;
+    out.addrError = (k.errors || []).find((r) => Number(r.no) === no) || null;
+    if (!out.admin) out.admin = (out.cod && out.cod.admin) || (out.geliver && out.geliver.admin) || '';
+  } catch { /* kargo yok */ }
+  return out;
+});
+ipcMain.handle('redownload-one', (_e, no) => {
+  const n = parseInt(no, 10);
+  if (!(n > 0)) return { error: 'Geçersiz sipariş no' };
+  return checkNow({ redownloadFrom: n, only: n });
+});
+// Gun ozeti (Bugun sayfasi)
+ipcMain.handle('day-summary', () => {
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0); const t0 = d0.getTime();
+  const root = downloadDir();
+  let files = 0;
+  try { if (root && fs.existsSync(root)) for (const g of F.listOrders(root, 3)) for (const f of g.files) if (f.mtime >= t0) files++; } catch { /* */ }
+  const sheets = Object.values(state.data.printed || {}).filter((t) => t >= t0).length;
+  const labels = Object.values(state.data.labelsPrinted || {}).filter((t) => t >= t0).length;
+  const buys = (state.data.purchases || []).filter((x) => x.at >= t0);
+  return { files, sheets, labels, spent: buys.reduce((a, x) => a + (Number(x.total) || 0), 0), bought: buys.length };
+});
+ipcMain.handle('notify', (_e, t, b) => { if (!win || !win.isFocused()) notify(t, b); return true; });
+ipcMain.handle('stations', () => {
+  syncShared();
+  const root = downloadDir();
+  const list = Object.entries((sharedCache && sharedCache.stations) || {}).map(([name, v]) => ({ name, ...v, me: name === stationName() })).sort((a, b) => b.seen - a.seen);
+  return { me: stationName(), host: os.hostname(), list, file: root ? Shared.fileOf(root) : '' };
+});
 // ---------- Siparisler sayfasi ----------
 let detailCache = null; // { at, data }
 ipcMain.handle('orders-seen', () => { state.data.ordersSeenAt = Date.now(); state.save(); return true; });
@@ -515,7 +617,7 @@ async function loadKargo(force) {
     out.codTest = c.value.test;
     for (const o of c.value.orders) {
       codNos.add(Number(o.no));
-      const row = { ...o, printedAt: printed['cod:' + o.no] || null, admin: shopAdminOrder(o.id) };
+      const row = { ...o, printedAt: printed['cod:' + o.no] || null, printedBy: (state.data.labelsBy || {})['cod:' + o.no] || '', admin: shopAdminOrder(o.id) };
       out.cod.push(row);
       if (o.sorun && !o.etiketli) out.errors.push({ source: 'cod', no: o.no, name: o.ad, address: o.adres, city: [o.sehir, o.il].filter(Boolean).join(' / '), error: o.sorun, link: row.admin, at: o.tarih });
     }
@@ -526,7 +628,7 @@ async function loadKargo(force) {
       const p = s.no ? pay[s.no] : null;
       const cod = codNos.has(s.no) || (p && (p.gateways || []).concat(p.shipping || '').some((x) => /cash on delivery|\bcod\b|kap[ıi]da/i.test(x))) || /KAPIDA/i.test(s.service || '');
       if (cod) continue;
-      const row = { ...s, kind: K.geliverKind(s), printedAt: printed['geliver:' + s.id] || null, admin: shopAdminOrder(s.gid) };
+      const row = { ...s, kind: K.geliverKind(s), printedAt: printed['geliver:' + s.id] || null, printedBy: (state.data.labelsBy || {})['geliver:' + s.id] || '', admin: shopAdminOrder(s.gid) };
       out.geliver.push(row);
       const err = K.geliverAddressError(s);
       if (err && row.kind !== 'done') out.errors.push({ source: 'geliver', id: s.id, gid: s.gid, no: s.no, name: s.name, address: s.address, city: [s.district, s.city].filter(Boolean).join(' / '), error: err, link: row.admin, geliver: true, at: s.createdAt, row: s });
@@ -586,11 +688,15 @@ async function printHtml(html, { printer, wMm = 100, hMm = 100, silent = true })
   } finally { if (!w.isDestroyed()) w.destroy(); setTimeout(() => fs.rm(tmp, () => {}), 60000); }
 }
 function markLabels(keys) {
+  syncShared();
   const printed = { ...(state.data.labelsPrinted || {}) };
+  const off = { ...(state.data.labelsOff || {}) };
   const now = Date.now();
-  for (const k of keys) printed[k] = now;
+  for (const k of keys) { printed[k] = now; delete off[k]; }
+  state.data.labelsOff = off;
   for (const k of Object.keys(printed)) if (now - printed[k] > 90 * 864e5) delete printed[k];
   state.data.labelsPrinted = printed; state.save();
+  syncShared();
   if (kargoCache) for (const r of [...kargoCache.data.cod, ...kargoCache.data.geliver]) { const key = r.id && r.provider !== undefined ? 'geliver:' + r.id : 'cod:' + r.no; if (keys.includes(key)) r.printedAt = now; }
 }
 
@@ -698,6 +804,53 @@ ipcMain.handle('labels-open', async (_e, kind, ids = []) => {
   } catch (e) { log('error', 'Kargo fişleri hazırlanamadı: ' + e.message); return { error: e.message }; }
 });
 // Geliver: HepsiJet teklifini kabul edip etiketi satin al (bakiyeden duser) — her seferinde onay sorulur
+// Satin alma oncesi kontrol (tek ve toplu alimda ortak): durum, Shopify odemesi, HepsiJet teklifi
+async function buyCheck(k, id, payFresh) {
+  const s = await K.geliverShipment(k.geliverToken, id);
+  const title = `#${s.no || '?'} ${s.name || ''}`.trim();
+  if (!['CREATED', 'GOT_OFFERS', 'FAILED'].includes(s.status)) return { title, error: `etiket zaten alınmış ya da gönderi kapanmış (${s.statusText})` };
+  const p = s.no ? (payFresh || state.data.pay || {})[s.no] : null;
+  if (!p) return { title, error: 'Shopify ödeme durumu okunamadı' };
+  const hold = holdReason(p);
+  if (hold) return { title, error: hold };
+  if (p.financial !== 'PAID') return { title, error: `ödeme “Ödendi” değil (${p.financial || 'bilinmiyor'})` };
+  if (!s.hepsijet) return { title, error: 'HepsiJet teklifi yok' };
+  return { title, s, o: s.hepsijet };
+}
+// Toplu: odemesi alinmis tum secili gonderileri tek onayla HepsiJet ile al
+ipcMain.handle('geliver-buy-bulk', async (_e, ids) => {
+  const k = config.data.kargo || {};
+  try {
+    const nos = [];
+    const pre = await Promise.all((ids || []).map((id) => K.geliverShipment(k.geliverToken, id).then((s) => { if (s.no) nos.push(s.no); return null; }).catch(() => null)));
+    void pre;
+    if (nos.length) { try { updatePay(await fetchPayStatuses(config.data, nos)); } catch { /* */ } }
+    const checks = [];
+    for (const id of ids || []) { try { checks.push({ id, ...(await buyCheck(k, id)) }); } catch (e) { checks.push({ id, title: id, error: e.message }); } }
+    const ok = checks.filter((c) => !c.error), bad = checks.filter((c) => c.error);
+    if (!ok.length) return { error: 'Satın alınabilecek gönderi yok: ' + bad.map((b) => `${b.title} (${b.error})`).join(', ') };
+    const total = ok.reduce((a, c) => a + c.o.total, 0);
+    let bal = null; try { bal = await K.geliverBalance(k.geliverToken); } catch { try { bal = await geliverWebBalance(true); } catch { /* */ } }
+    if (bal != null && bal < total) return { error: `Geliver bakiyesi yetersiz: ${tl(bal)} (gereken ${tl(total)}). Bakiye ekleyin.` };
+    const c = await ask({
+      type: 'question', title: 'Toplu HepsiJet alımı', noLink: true, defaultId: 1, cancelId: 0, buttons: ['İptal', `${ok.length} etiketi satın al · ${tl(total)}`],
+      message: `${ok.length} gönderi için HepsiJet kargo etiketi satın alınacak.`,
+      detail: ok.map((x) => `${x.title} — ${tl(x.o.total)}`).join('\n') + `\n\nToplam: ${tl(total)} (Geliver bakiyesinden düşer)` + (bal != null ? `\nBakiye: ${tl(bal)} → ${tl(bal - total)}` : '') + (bad.length ? `\n\nAlınmayacak (${bad.length}):\n` + bad.map((b) => `${b.title} — ${b.error}`).join('\n') : ''),
+    });
+    if (c.response !== 1) return { canceled: true };
+    const bought = [], failed = [];
+    for (const x of ok) {
+      try {
+        await K.geliverBuy(k.geliverToken, x.o.id);
+        bought.push(x.s.id);
+        state.data.purchases = (state.data.purchases || []).filter((y) => Date.now() - y.at < 40 * 864e5).concat([{ at: Date.now(), no: x.s.no, total: x.o.total }]);
+        log('ok', `${x.title} HepsiJet etiketi satın alındı (${tl(x.o.total)}).`);
+      } catch (e) { failed.push(`${x.title}: ${e.message}`); log('error', `${x.title} satın alınamadı: ${e.message}`); }
+    }
+    state.save(); kargoCache = null; gelWeb.at = 0; send('kargo-updated');
+    return { ok: true, bought, failed, total: ok.filter((x) => bought.includes(x.s.id)).reduce((a, x) => a + x.o.total, 0), skipped: bad.map((b) => `${b.title} (${b.error})`) };
+  } catch (e) { log('error', 'Toplu satın alma: ' + e.message); return { error: e.message }; }
+});
 ipcMain.handle('geliver-buy', async (_e, id) => {
   const k = config.data.kargo || {};
   try {
@@ -722,6 +875,7 @@ ipcMain.handle('geliver-buy', async (_e, id) => {
     if (c.response !== 1) return { canceled: true };
     const after = await K.geliverBuy(k.geliverToken, o.id);
     kargoCache = null; gelWeb.at = 0;
+    state.data.purchases = (state.data.purchases || []).filter((x) => Date.now() - x.at < 40 * 864e5).concat([{ at: Date.now(), no: s.no, total: o.total }]); state.save();
     log('ok', `${title} HepsiJet etiketi satın alındı (${tl(o.total)}).`);
     send('kargo-updated');
     return { ok: true, id: s.id, pdfUrl: after && after.pdfUrl, total: o.total };
@@ -759,7 +913,7 @@ ipcMain.handle('kargo-days', (_e, d) => {
 });
 ipcMain.handle('label-mark', (_e, keys, on) => {
   if (on) markLabels(keys);
-  else { const p = { ...(state.data.labelsPrinted || {}) }; for (const k of keys) delete p[k]; state.data.labelsPrinted = p; state.save(); kargoCache = null; }
+  else { syncShared(); const p = { ...(state.data.labelsPrinted || {}) }; const off = { ...(state.data.labelsOff || {}) }; for (const k of keys) { delete p[k]; off[k] = Date.now(); } state.data.labelsPrinted = p; state.data.labelsOff = off; state.save(); syncShared(); kargoCache = null; }
   return true;
 });
 ipcMain.handle('open-url', (_e, u) => { if (/^https:\/\//.test(String(u))) shell.openExternal(u); return true; });
@@ -807,7 +961,8 @@ ipcMain.handle('reset-files', async () => {
   const failed = [];
   for (const d of days) { try { fs.rmSync(d.path, { recursive: true, force: true }); } catch (e) { failed.push(d.name); } }
   try { fs.rmSync(path.join(app.getPath('userData'), 'thumbs'), { recursive: true, force: true }); } catch { /* */ }
-  state.data.downloaded = []; state.data.arranged = {}; state.data.printed = {};
+  state.data.downloaded = []; state.data.arranged = {}; state.data.printed = {}; state.data.printedOff = {}; state.data.arrangedAt = Date.now();
+  try { fs.rmSync(Shared.fileOf(root), { force: true }); } catch { /* */ }
   state.data.resetAt = Date.now(); state.data.ordersSeenAt = Date.now();
   state.save(); detailCache = null;
   if (failed.length) log('warn', `Bazı klasörler silinemedi (açık olabilir): ${failed.join(', ')}`);
@@ -834,9 +989,12 @@ ipcMain.handle('redownload', (_e, from) => {
 ipcMain.handle('build', async (_e, force) => { try { return await buildSheets(force); } catch (e) { log('error', e.message); return { error: e.message }; } });
 ipcMain.handle('print', async (_e, paths) => { try { return await printSheets(paths); } catch (e) { log('error', e.message); return { error: e.message }; } });
 ipcMain.handle('mark-printed', (_e, p, on) => {
+  syncShared();
   const printed = { ...(state.data.printed || {}) };
-  if (on) printed[p] = Date.now(); else delete printed[p];
-  state.data.printed = printed; state.save();
+  const off = { ...(state.data.printedOff || {}) };
+  if (on) { printed[p] = Date.now(); delete off[p]; } else { delete printed[p]; off[p] = Date.now(); }
+  state.data.printed = printed; state.data.printedOff = off; state.save();
+  syncShared();
   log('ok', `${path.basename(p)} ${on ? 'basıldı olarak işaretlendi' : 'basılmadı olarak işaretlendi'}.`);
   send('refresh');
   return true;

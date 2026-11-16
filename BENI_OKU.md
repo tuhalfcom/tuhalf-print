@@ -46,7 +46,7 @@ Soldaki tek menü: **Bugün** (günün işleri 1→4 ve uyarılar), **Baskı sı
 ## Derleme (geliştirici)
 ```
 npm install
-npm test            # 44 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
+npm test            # 46 test: adlandırma, yerleşim, klasörler, Shopify (sahte sunucu)
 npm start           # geliştirme modunda aç
 npm run dist:win    # dist/Tuhalf-Print-Kurulum-1.1.0.exe
 npm run dist:mac    # dist/Tuhalf-Print-1.1.0-mac.dmg (Mac'te)
@@ -67,3 +67,15 @@ Mac sürümü imzasız olduğu için kendini güncelleyemez; Mac'te buton indirm
 
 Ayarlar ilk açılışta `Belgeler\tuhalf-baski\ayarlar.json` dosyasından otomatik aktarılır; eski zamanlanmış görev kaldırılır.
 Mac sürümü imzasızdır: ilk açılışta sağ tık > Aç.
+
+## 1.9.0 — Çok bilgisayar / yazıcı kurgusu ve kullanım kolaylıkları
+
+**Bilgisayar ve yazıcı ekleme (Tercihler › Bilgisayarlar):**
+- Program “basıldı / kargo fişi yazdırıldı / indirildi / dizildi” bilgilerini indirme klasöründeki `.tuhalf/ortak-durum.json` dosyasında tutar. Tek bilgisayarda hiçbir şey yapmanız gerekmez.
+- İkinci bilgisayar: ana bilgisayardaki BASKI klasörünü ağda paylaşın, yeni bilgisayarda bu klasörü “İndirme klasörü” seçin, ayar dosyasını içe aktarın.
+- Shopify'dan indirmeyi yalnızca bir bilgisayar yapsın (“Bu bilgisayar Shopify'dan indirsin” sadece onda açık).
+- Her bilgisayar kendi yazıcısıyla basar; bir sayfa/fiş bir yerde basılınca diğerlerinde “Basıldı · bilgisayar adı” görünür. Sayfa hazırlamayı aynı anda tek bilgisayar yapabilir (kilit).
+
+**Kolaylıklar:** sipariş detay paneli (satıra tıkla), Ctrl+K hızlı arama, Bugün'de “Sıradaki iş”, gün özeti ve son olaylar, ödenmişlerin toplu HepsiJet alımı, yeni sipariş / adres hatası / düşük bakiye için ses ve Windows bildirimi (Tercihler'den kapatılabilir), baskı sırasında sayfa doluluk yüzdesi, Hazır sayfalar › Geçmiş, etkinlik panelinde filtre ve “Kopyala”.
+
+**Kısayollar:** Ctrl+K arama · Ctrl+1…6 sayfalar · F5 yenile · Ctrl+P (Kargo fişleri) seçilenleri yazdır · Esc kapat.

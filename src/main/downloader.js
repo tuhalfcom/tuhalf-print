@@ -124,7 +124,7 @@ async function runDownload(cfg, done, log) {
   for (const o of orders) {
     const orderNo = parseInt(String(o.name).replace(/\D/g, ''), 10);
     if (o.cancelledAt) continue;
-    if (redo) { if (orderNo < redo) continue; }
+    if (redo) { if (orderNo < redo) continue; if (cfg.redownloadOnly && orderNo !== Number(cfg.redownloadOnly)) continue; }
     else {
       if (done.has(o.id)) continue;
       if (cfg.ignoreBefore && Date.parse(o.createdAt) < cfg.ignoreBefore) continue;   // resetten onceki siparis
@@ -262,7 +262,7 @@ async function fetchOrderDetails(cfg, days = 14) {
       const no = parseInt(String(o.name).replace(/\D/g, ''), 10);
       const name = (o.shippingAddress && o.shippingAddress.name) || (o.billingAddress && o.billingAddress.name) || (o.customer && o.customer.displayName) || '';
       return {
-        no, name, city: (o.shippingAddress && (o.shippingAddress.city || o.shippingAddress.province)) || '',
+        gid: o.id, no, name, city: (o.shippingAddress && (o.shippingAddress.city || o.shippingAddress.province)) || '',
         createdAt: o.createdAt, cancelled: !!o.cancelledAt,
         financial: o.displayFinancialStatus || '', fulfillment: o.displayFulfillmentStatus || '',
         gateways: o.paymentGatewayNames || [], shipping: (o.shippingLine && o.shippingLine.title) || '',

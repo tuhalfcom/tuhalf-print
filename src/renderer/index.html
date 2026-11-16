@@ -13,6 +13,7 @@
     <span class="tsep"></span>
     <div class="top-status" id="topStatus"><span class="dot"></span><span id="statusText">Hazırlanıyor…</span></div>
     <button class="btn ghost small" id="btnCheck"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Şimdi kontrol et</button>
+    <button class="search-hint" id="btnPal" title="Hızlı arama (Ctrl+K)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Sipariş ara…</span><kbd>Ctrl K</kbd></button>
     <span class="grow"></span>
     <button class="btn update hidden" id="btnUpdateTop" title="Güncelleme"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span id="updTopText">Güncelleme</span></button>
   </header>
@@ -41,8 +42,13 @@
           <div class="page-actions"></div>
         </header>
       <div class="setup hidden" id="setupCard"></div>
+      <div class="next" id="homeNext"></div>
       <div class="flow" id="homeFlow"></div>
       <div class="alerts" id="homeAlerts"></div>
+      <div class="home-grid">
+        <section class="hcard"><div class="hcard-head"><b>Gün özeti</b><span class="muted small" id="sumDate"></span></div><div class="sum" id="homeSum"></div></section>
+        <section class="hcard"><div class="hcard-head"><b>Son olaylar</b><button class="btn ghost small" id="btnAllLogs">Tümü</button></div><div class="feed" id="homeFeed"></div></section>
+      </div>
     </section>
 
     <section class="view hidden" id="view-plan">
@@ -73,7 +79,7 @@
       <header class="page-head">
           <div class="page-icon green"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg></div>
           <div class="page-titles"><h1>Hazır sayfalar</h1><p>Photoshop’ta hazırlanan baskı sayfaları. Kontrol edip basın.</p></div>
-          <div class="page-actions"><button class="btn primary" id="btnPrintAll" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Basılmamışları bas</span></button></div>
+          <div class="page-actions"><div class="seg" id="sheetTab"><button data-t="todo" class="active">Basılacaklar</button><button data-t="done">Geçmiş</button></div><button class="btn primary" id="btnPrintAll" disabled><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg><span>Basılmamışları bas</span></button></div>
         </header>
       <div class="sheet-grid" id="sheets"></div>
     </section>
@@ -133,6 +139,7 @@
           <div class="tabs-line" id="kargoFilter"><button data-f="todo" class="active">Yazdırılacaklar</button><button data-f="offer">Teklif bekleyen</button><button data-f="all">Tümü / eski fişler</button></div>
           <select id="kargoDays" class="days" title="Hangi tarihteki siparişler gösterilsin"><option value="today">Bugün</option><option value="yesterday">Dün</option><option value="3">Son 3 gün</option><option value="7">Son 7 gün</option><option value="14">Son 14 gün</option><option value="30">Son 30 gün</option><option value="60">Son 60 gün</option><option value="90">Son 90 gün</option></select>
           <span class="grow"></span>
+          <button class="btn small buy hidden" id="btnBulkBuy" title="Ödemesi alınmış tüm teklifleri tek onayla HepsiJet ile alır"></button>
           <span class="muted small" id="kargoInfo"></span>
         </div>
         <div class="ord-note hidden" id="kargoNote"></div>
@@ -158,7 +165,10 @@
 
   <footer class="statusbar activity" id="activity">
     <button class="activity-toggle" id="actToggle"><span class="dot"></span><span id="lastLog">Etkinlik</span><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
-    <div class="activity-list" id="logList"></div>
+    <div class="activity-panel">
+      <div class="act-tools"><div class="seg small" id="actFilter"><button data-f="all" class="active">Tümü</button><button data-f="ok">Yapılanlar</button><button data-f="bad">Uyarı ve hatalar</button></div><span class="grow"></span><button class="btn ghost small" id="btnCopyLog" title="Sorun bildirirken yapıştırmak için">Kopyala</button></div>
+      <div class="activity-list" id="logList"></div>
+    </div>
   </footer>
 
     <div class="ask-bg hidden" id="askBg">
@@ -189,6 +199,7 @@
         <a data-goto="set-shop">Shopify</a>
         <a data-goto="set-card">Teşekkür kartı</a>
         <a data-goto="set-dirs">Klasörler</a>
+        <a data-goto="set-pc">Bilgisayarlar</a>
         <a data-goto="set-print">Baskı</a>
         <a data-goto="set-kargo">Kargo fişleri</a>
         <a data-goto="set-reset">Sıfırlama</a>
@@ -232,7 +243,25 @@
       <label class="check"><input type="checkbox" name="card.enabled" /> Boşluklara teşekkür kartı yerleştir</label>
       <h4 id="set-dirs">Klasörler</h4>
       <label>İndirme klasörü<div class="pick"><input name="downloadDir" /><button type="button" class="btn ghost small" data-pick="folder" data-target="downloadDir">Seç</button></div></label>
-      <label>Mesai bitişi<input name="dayEnd" placeholder="18:00" /><small>Bu saatten sonra inen dosyalar ertesi günün klasörüne yazılır.</small></label>
+      <small class="muted">Siparişler, geldiği günün klasörüne iner (ör. 15.11'de gelen sipariş → 15-11-26-SIPARISLER).</small>
+      <h4 id="set-pc">Bilgisayarlar ve yazıcılar</h4>
+      <div class="row2">
+        <label>Bu bilgisayarın adı<input name="station" placeholder="ör. Baskı-1" /><small>Kim neyi bastı, listelerde bu adla görünür.</small></label>
+        <label class="check" style="align-self:center"><input type="checkbox" name="roles.download" /> Bu bilgisayar Shopify'dan baskı dosyalarını indirsin</label>
+      </div>
+      <label class="check"><input type="checkbox" name="sound" /> Yeni sipariş, adres hatası ve düşük bakiyede sesli uyarı ver</label>
+      <div class="pc-box">
+        <div class="pc-head"><b>Bu klasörü kullanan bilgisayarlar</b><button type="button" class="btn ghost small" id="btnPcRefresh">Yenile</button></div>
+        <div id="pcList" class="pc-list muted small">—</div>
+        <details class="pc-help"><summary>Bilgisayar / yazıcı eklerken ne yapmalı?</summary>
+          <ol>
+            <li><b>Tek bilgisayar (şimdiki durum):</b> Hiçbir şey yapmanıza gerek yok. Program “basıldı / fiş yazdırıldı” bilgilerini indirme klasöründeki <code>.tuhalf</code> klasöründe tutar.</li>
+            <li><b>İkinci bilgisayar eklerken:</b> Ana bilgisayardaki BASKI klasörünü ağda paylaşın (sağ tık › Özellikler › Paylaşım). Yeni bilgisayara Tuhalf Print'i kurun, ayar dosyasını içe aktarın ve İndirme klasörü olarak bu paylaşılan klasörü seçin.</li>
+            <li><b>İndirmeyi tek bilgisayar yapsın:</b> Yalnızca ana bilgisayarda “Shopify'dan indirsin” açık kalsın, diğerlerinde kapatın. Hepsi aynı dosyaları görür.</li>
+            <li><b>Yazıcılar:</b> Her bilgisayar kendi yazıcısıyla basar. Bir sayfa ya da kargo fişi bir yerde basılınca diğer bilgisayarlarda da “Basıldı · bilgisayar adı” görünür; aynı sayfa iki kez basılmaz. Sayfa hazırlamayı aynı anda yalnızca bir bilgisayar yapabilir.</li>
+          </ol>
+        </details>
+      </div>
       <h4 id="set-print">Baskı</h4>
       <div class="row2">
         <label>Sayfa genişliği (mm)<input name="print.rollWidthMm" type="number" step="0.01" /></label>
@@ -274,6 +303,20 @@
     <div class="drawer-foot"><button class="btn" id="btnCancel">İptal</button><button class="btn primary" id="btnSave">Tamam</button></div>
   </aside>
 
+  <!-- Siparis detay paneli -->
+  <div class="od-bg hidden" id="odBg"></div>
+  <aside class="od" id="od" aria-hidden="true">
+    <div class="od-head"><div><div class="od-no" id="odNo">#—</div><div class="od-sub" id="odSub"></div></div><button class="icon-btn" id="odClose" title="Kapat (Esc)"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="od-body scroll" id="odBody"></div>
+  </aside>
+  <!-- Hizli arama (Ctrl+K) -->
+  <div class="pal-bg hidden" id="palBg">
+    <div class="pal">
+      <div class="pal-in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="palInput" placeholder="Sipariş no, müşteri, şehir… ya da sayfa adı" autocomplete="off" /><kbd>Esc</kbd></div>
+      <div class="pal-list scroll" id="palList"></div>
+      <div class="pal-foot"><span><kbd>↑</kbd><kbd>↓</kbd> seç</span><span><kbd>Enter</kbd> aç</span><span><kbd>Ctrl</kbd>+<kbd>1-6</kbd> sayfalar</span><span><kbd>F5</kbd> yenile</span></div>
+    </div>
+  </div>
   <div class="toast hidden" id="toast"></div>
   <script src="renderer.js"></script>
 </body>

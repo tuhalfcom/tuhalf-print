@@ -158,6 +158,34 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     const bad = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ result: false, message: 'Recipient address', additionalMessage: 'districtID invalid' }) });
     await assert.rejects(K.updateGeliverAddress('tok', 'sh1', { name: 'Ali' }, bad), /Recipient address — districtID invalid/);
   });
+  await t('Ortak durum: iki bilgisayar basildi/fis/indirme bilgisini paylasir, en son degisiklik kazanir', async () => {
+    const Sh = require('../src/main/shared');
+    const rootA = path.join('X:', 'BASKI'), rootB = path.join('/mnt', 'paylasim', 'BASKI');
+    const pA = path.join(rootA, '15-11-26-SIPARISLER', '_Sayfalar', 'Sayfa-01.psd');
+    let S = {};
+    let r = Sh.merge(S, { downloaded: ['o1'], printed: { [pA]: 1000 }, labels: { 'cod:1': 1000 }, arranged: { a: 1 }, arrangedAt: 1000 }, { root: rootA, station: 'A', now: 2000 });
+    S = r.S;
+    assert.strictEqual(S.printed['15-11-26-SIPARISLER/_Sayfalar/Sayfa-01.psd'].by, 'A');
+    // B baska yoldan ayni klasoru goruyor
+    r = Sh.merge(S, { downloaded: ['o2'], printed: {}, labels: {}, arranged: {}, arrangedAt: 0 }, { root: rootB, station: 'B', now: 3000 });
+    const pB = path.join(rootB, '15-11-26-SIPARISLER', '_Sayfalar', 'Sayfa-01.psd');
+    assert.strictEqual(r.L.printed[pB], 1000); assert.strictEqual(r.L.printedBy[pB], 'A');
+    assert.deepStrictEqual(r.L.downloaded.sort(), ['o1', 'o2']); assert.strictEqual(r.L.labels['cod:1'], 1000);
+    assert.deepStrictEqual(r.L.arranged, { a: 1 });
+    S = r.S;
+    // B "basilmadi" isaretler (daha yeni) -> A'da da kalkar
+    r = Sh.merge(S, { printed: {}, printedOff: { [pB]: 4000 } }, { root: rootB, station: 'B', now: 4000 }); S = r.S;
+    r = Sh.merge(S, { printed: { [pA]: 1000 } }, { root: rootA, station: 'A', now: 5000 });
+    assert.strictEqual(r.L.printed[pA], undefined); assert.ok(Object.keys(r.S.stations).includes('B'));
+  });
+  await t('Ortak durum: sayfa hazirlama kilidi ayni anda tek bilgisayara verilir', async () => {
+    const Sh = require('../src/main/shared');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-kilit-'));
+    assert.ok(Sh.lock(dir, 'x', 'A').ok);
+    const b = Sh.lock(dir, 'x', 'B'); assert.strictEqual(b.ok, false); assert.strictEqual(b.by, 'A');
+    Sh.unlock(dir, 'x', 'A'); assert.ok(Sh.lock(dir, 'x', 'B').ok);
+    Sh.write(dir, { v: 1 }); assert.strictEqual(Sh.read(dir).v, 1);
+  });
   await t('Adres duzeltme (#2187): il yanlis secilmis (Afyon), adreste Fatih Istanbul yaziyor', async () => {
     const r = await A({ name: 'Mustafa Kapçak', address1: 'Alişan Sokak Nişanca Mahallesi Fatih İstanbul', address2: 'No5 daire7', city: 'İstanbul', zip: '034', province: 'Afyonkarahisar', provinceCode: 'TR-03' });
     assert.strictEqual(r.address.cityCode, '34'); assert.strictEqual(r.address.districtName, 'Fatih');
