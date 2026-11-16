@@ -4,7 +4,7 @@ const path = require('path');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const { sizeAndColor, buildName } = require('./naming');
-const { dayFolderName } = require('./folders');
+const { orderDayFolderName } = require('./folders');
 
 const QUERY = `query($cursor: String, $search: String) {
   orders(first: 50, after: $cursor, query: $search, sortKey: CREATED_AT) {
@@ -112,9 +112,9 @@ async function runDownload(cfg, done, log) {
     cursor = page.orders.pageInfo.endCursor;
   } while (page.orders.pageInfo.hasNextPage);
 
-  const folderName = dayFolderName(new Date(), cfg.dayEnd);
-  const outDir = path.join(cfg.downloadDir, folderName);
-  const result = { checked: orders.length, files: [], pending: [], errors: [], folder: outDir, folderName };
+  // Klasor: siparisin GELDIGI gun (indirildigi an degil). Ornek: 15.11 23:50'de gelen siparis 15-11-..-SIPARISLER
+  const usedFolders = new Set();
+  const result = { checked: orders.length, files: [], pending: [], errors: [], folder: null, folderName: '' };
 
   // Yeniden indirme modu: bu numaradan itibaren daha once indirilmis siparisler de tekrar indirilir
   const redo = Number(cfg.redownloadFrom) > 0 ? Number(cfg.redownloadFrom) : 0;
@@ -156,6 +156,8 @@ async function runDownload(cfg, done, log) {
       continue;
     }
     if (!items.length) { done.add(o.id); continue; }   // baski urunu yok
+    const folderName = orderDayFolderName(o.createdAt);
+    const outDir = path.join(cfg.downloadDir, folderName);
     fs.mkdirSync(outDir, { recursive: true });
     try {
       let i = 0;
@@ -166,6 +168,7 @@ async function runDownload(cfg, done, log) {
         if (redo && existsAny(cfg.downloadDir, baseName)) { result.skipped = (result.skipped || 0) + 1; continue; }
         const file = await downloadFile(it.url, outDir, baseName);
         result.files.push(file);
+        usedFolders.add(folderName); result.folder = outDir;
         log('ok', `İndirildi: ${file}`);
       }
       done.add(o.id);
@@ -174,6 +177,7 @@ async function runDownload(cfg, done, log) {
       log('error', `#${orderNo} indirilemedi, sonra tekrar denenecek (${e.message})`);
     }
   }
+  result.folderName = [...usedFolders].join(', ');
   return result;
 }
 

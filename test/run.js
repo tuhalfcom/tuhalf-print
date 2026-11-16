@@ -187,6 +187,8 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
   await t('Mesai sonrasi ertesi gun', () => {
     assert.strictEqual(F.dayFolderName(new Date(2026, 10, 14, 17, 59), '18:00'), '14-11-26-SIPARISLER');
     assert.strictEqual(F.dayFolderName(new Date(2026, 10, 14, 18, 1), '18:00'), '15-11-26-SIPARISLER');
+    assert.strictEqual(F.orderDayFolderName(new Date(2026, 10, 15, 23, 50)), '15-11-26-SIPARISLER');
+    assert.strictEqual(F.orderDayFolderName(new Date(2026, 10, 15, 0, 5)), '15-11-26-SIPARISLER');
   });
   const d1 = path.join(root, '13-11-26-SIPARISLER'), d2 = path.join(root, '14-11-26-SIPARISLER');
   fs.mkdirSync(d1); fs.mkdirSync(d2);

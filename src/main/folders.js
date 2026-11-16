@@ -17,6 +17,12 @@ function dayFolderName(now, dayEnd) {
   return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${String(d.getFullYear()).slice(2)}-SIPARISLER`;
 }
 
+// Siparisin geldigi gun (yerel saat) -> o gunun klasoru. 15.11'de gelen siparis 15-11-..-SIPARISLER'e gider.
+function orderDayFolderName(date) {
+  const d = new Date(date);
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${String(d.getFullYear()).slice(2)}-SIPARISLER`;
+}
+
 function dayKey(name) { const m = name.match(DAY_RE); return m ? `${m[3]}${m[2]}${m[1]}` : ''; }
 
 function listDayFolders(root) {
@@ -122,4 +128,4 @@ function moveToArranged(file) {
   fs.renameSync(file, target);
 }
 
-module.exports = { dayFolderName, listDayFolders, listImages, listOrders, pendingItems, listSheets, sheetIndex, nextSheetNo, moveToArranged, pad };
+module.exports = { dayFolderName, orderDayFolderName, listDayFolders, listImages, listOrders, pendingItems, listSheets, sheetIndex, nextSheetNo, moveToArranged, pad };

@@ -423,7 +423,7 @@ function renderToday(err) {
     const d = TODAY.today - TODAY.yesterdaySoFar;
     el.querySelector('.tp-num').textContent = TODAY.today;
     el.classList.toggle('up', d > 0); el.classList.toggle('down', d < 0);
-    el.querySelector('small').innerHTML = `${money(TODAY.revenue)} <span class="tp-sep">·</span> <span class="tp-delta">${d > 0 ? '▲ ' + d : d < 0 ? '▼ ' + Math.abs(d) : '='}</span> dün bu saate göre`;
+    el.querySelector('small').innerHTML = `${money(TODAY.revenue)} <span class="tp-sep">·</span> <span class="tp-delta">${d > 0 ? '+' + d : d < 0 ? '−' + Math.abs(d) : '±0'}</span> düne göre`;
     el.title = `Bugün ${TODAY.today} sipariş · dün bu saate kadar ${TODAY.yesterdaySoFar}, dün toplam ${TODAY.yesterday} (iptaller hariç) · ${fmtTime(TODAY.at)}`;
   }
 }
