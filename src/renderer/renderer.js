@@ -1,6 +1,11 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
 const eyeBtn = (no) => `<button class="eye" data-od="${esc(no)}" title="Siparişi önizle"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
+// Birden fazla urunlu siparis: personel atlamasin diye her yerde belirgin isaret
+let ORDQ = new Map();
+function buildQty() { ORDQ = new Map(); for (const o of (typeof ORD !== 'undefined' && ORD.rows) || []) if (o.items && o.items.length) ORDQ.set(Number(o.no), o.items.reduce((a, i) => a + (Number(i.qty) || 1), 0)); }
+const qtyOf = (no) => ORDQ.get(Number(no)) || 0;
+const multiBadge = (no) => { const n = qtyOf(no); return n > 1 ? `<span class="multi" title="Bu siparişte ${n} ürün var — hepsini birlikte hazırlayıp aynı pakete koyun">${n} ürün</span>` : ''; };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—');
 let CFG = null, STATUS = {}, SHEETS = [], PLAN = null, ORDR = null, PSFOUND = null;
@@ -119,7 +124,8 @@ function paperHtml(sheet, items) {
     const inner = i.rotated
       ? `<div class="img" style="${bg}width:${(i.hMm / i.wMm) * 100}%;height:${(i.wMm / i.hMm) * 100}%;transform:translate(-50%,-50%) rotate(90deg)"></div>`
       : `<div class="img" style="${bg}width:100%;height:100%;left:0;top:0"></div>`;
-    return `<div class="slot${i.card ? ' card' : ''}" style="${box}" title="${esc(i.name)}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}</span></div>`;
+    const q = i.card ? 0 : qtyOf(i.order);
+    return `<div class="slot${i.card ? ' card' : ''}${q > 1 ? ' multi' : ''}" style="${box}" title="${esc(i.name)}${q > 1 ? ` — bu siparişte ${q} ürün var` : ''}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}${q > 1 ? ` · ${q} ürün` : ''}</span></div>`;
   }).join('');
   return `<div class="paper" style="aspect-ratio:${w}/${h}">${slots}</div>`;
 }
@@ -414,8 +420,8 @@ function renderOrdersPage() {
     const ps = printState(o);
     const files = o.local ? o.local.files.map((f) => `<div class="ord-file" data-path="${esc(f.path)}" title="Klasörde göster">${f.isNew ? '<span class="new-dot" title="Yeni"></span>' : ''}<span class="tag">${esc(f.size || '?')}</span><span class="fname">${esc(f.name)}</span></div>`).join('') : '';
     const items = !files && o.items && o.items.length ? `<div class="sub">${o.items.map((i) => esc(`${i.qty}× ${i.title}${i.variant ? ' / ' + i.variant : ''}`)).join('<br>')}</div>` : '';
-    return `<tr class="${o.cancelled ? 'cancelled' : ''}">
-      <td class="no"><div class="no-wrap">${eyeBtn(o.no)}<span>#${o.no}</span></div>${o.cancelled ? '<div class="sub">İptal</div>' : ''}</td>
+    return `<tr class="${o.cancelled ? 'cancelled' : ''}${qtyOf(o.no) > 1 ? ' is-multi' : ''}">
+      <td class="no"><div class="no-wrap">${eyeBtn(o.no)}<span>#${o.no}</span>${multiBadge(o.no)}</div>${o.cancelled ? '<div class="sub">İptal</div>' : ''}</td>
       <td>${fmtDate(o.createdAt)}</td>
       <td>${o.name ? esc(o.name) : '<span class="muted">—</span>'}${o.city ? `<div class="sub">${esc(o.city)}</div>` : ''}</td>
       <td>${payCell(o)}</td>
@@ -432,7 +438,7 @@ function renderOrdersPage() {
 async function loadOrdersPage(force, markSeen) {
   if (!ORD.rows.length) $('#ordRows').innerHTML = '<tr><td colspan="8" class="muted">Siparişler yükleniyor…</td></tr>';
   const r = await window.api.ordersDetail(force, RANGE_FETCH[ORD_RANGE] || Number(ORD_RANGE) || 14);
-  ORD = r;
+  ORD = r; buildQty();
   const notes = [];
   if (r.error) notes.push(r.error);
   if (r.rows.length && !r.pii) notes.push('Müşteri adı ve şehir için Shopify uygulamasında “korunan müşteri verisi” (ad, adres) izni gerekiyor. İzin verilene kadar bu sütunlar boş kalır.');
@@ -622,9 +628,9 @@ function renderKargo() {
     const ship = KTAB === 'cod' ? `<td class="num">${money(r.tutar)}</td>` : `<td>${esc(r.provider || '—')}${r.price != null ? `<div class="sub">${money(r.price)}${r.desi != null ? ' · ' + r.desi + ' desi' : ''}</div>` : ''}</td>`;
     const place = KTAB === 'cod' ? [r.ilce, r.il].filter(Boolean).join(' / ') || r.sehir : [r.district, r.city].filter(Boolean).join(' / ');
     const held = KTAB === 'geliver' && r.kind === 'offer' && r.pay && r.pay.hold;
-    return `<tr class="${KSEL.has(k) ? 'sel' : ''}${held ? ' held' : ''}">
+    return `<tr class="${KSEL.has(k) ? 'sel' : ''}${held ? ' held' : ''}${qtyOf(r.no) > 1 ? ' is-multi' : ''}">
       <td class="cb">${can ? `<input type="checkbox" data-ksel="${esc(k)}" ${KSEL.has(k) ? 'checked' : ''}>` : ''}</td>
-      <td class="no"><div class="no-wrap">${r.no ? eyeBtn(r.no) : ''}<span>#${esc(r.no || '?')}</span></div></td><td>${fmtD(KTAB === 'cod' ? r.tarih : r.createdAt)}</td>
+      <td class="no"><div class="no-wrap">${r.no ? eyeBtn(r.no) : ''}<span>#${esc(r.no || '?')}</span>${r.no ? multiBadge(r.no) : ''}</div></td><td>${fmtD(KTAB === 'cod' ? r.tarih : r.createdAt)}</td>
       <td>${esc(KTAB === 'cod' ? r.ad : r.name) || '—'}</td>
       <td class="addr">${esc(r.adres || r.address || '')}${place ? `<div class="sub">${esc(place)}</div>` : ''}</td>
       ${ship}<td>${st}</td><td><div class="act">${act}</div></td></tr>`;
@@ -652,7 +658,7 @@ function renderAdres() {
       else if (e.shopNote) note = `<div class="sub">${esc(e.shopNote)}</div>`;
     }
     return `<tr>
-    <td class="no"><div class="no-wrap">${e.no ? eyeBtn(e.no) : ''}<span>#${esc(e.no || '?')}</span></div></td>
+    <td class="no"><div class="no-wrap">${e.no ? eyeBtn(e.no) : ''}<span>#${esc(e.no || '?')}</span>${e.no ? multiBadge(e.no) : ''}</div></td>
     <td>${e.source === 'cod' ? '<span class="chip cod">Kapıda ödeme · DHL</span>' : '<span class="chip ship">Geliver</span>'}</td>
     <td>${esc(e.name || '—')}</td>
     <td class="addr">${esc(e.address || '')}${e.city ? `<div class="sub">${esc(e.city)}</div>` : ''}</td>
@@ -978,6 +984,8 @@ window.api.on('refresh', () => { refreshAll(); loadToday(); });
   d.logs.forEach(addLog);
   renderStatus();
   await refreshAll();
+  // Coklu urun isaretleri icin siparis listesini arka planda yukle
+  window.api.ordersDetail(false, 14).then((r) => { if (r && r.rows && !ORD.rows.length) { ORD = r; buildQty(); if (KG) renderKargo(); loadPlan(); loadSheets(); } }).catch(() => {});
 
   setInterval(renderStatus, 30000);
 })();
@@ -1004,6 +1012,8 @@ async function openOrder(no) {
   const ps = row.no ? printState({ ...row, local: d.files.length ? { files: d.files.map((f) => ({ ...f, printed: d.sheets.length > 0 && d.sheets.every((x) => x.printedAt) })) } : null, hold: d.hold }) : null;
   parts.push(`<div class="od-chips">${row.financial ? payCell(row) : ''}${ps ? `<div>${ps.html}</div>` : ''}${d.addrError ? '<span class="chip err">Adres hatası</span>' : ''}</div>`);
   if (d.hold) parts.push(`<div class="od-warn">⚠ ${esc(d.hold)} — baskı ve kargo bekletiliyor.</div>`);
+  const nq = (row.items || []).reduce((a, i) => a + (Number(i.qty) || 1), 0) || d.files.reduce((a, f) => a + (Number(f.qty) || 1), 0);
+  if (nq > 1) parts.push(`<div class="od-multi"><b>${nq} ürünlü sipariş</b><span>Hepsini birlikte basıp aynı pakete koyun; tek fişle gönderilir.</span></div>`);
   // urunler
   if (row.items && row.items.length) parts.push(sec('Ürünler', `<ul class="od-items">${row.items.map((i) => `<li><b>${i.qty}×</b> ${esc(i.title)}${i.variant ? `<span class="muted"> / ${esc(i.variant)}</span>` : ''}</li>`).join('')}</ul>${row.total != null ? `<div class="od-total">${money(row.total)} · ${esc(row.shipping || '')}</div>` : ''}`));
   // baski dosyalari (buyuk onizleme solda)
@@ -1066,7 +1076,7 @@ const PAGES = [['home', 'Bugün'], ['plan', 'Baskı sırası'], ['sheets', 'Haz�
 let PAL = [], PAL_I = 0;
 async function openPalette() {
   $('#palBg').classList.remove('hidden'); $('#palInput').value = ''; $('#palInput').focus();
-  if (!ORD.rows || !ORD.rows.length) { try { ORD = await window.api.ordersDetail(false, 30); } catch { /* */ } }
+  if (!ORD.rows || !ORD.rows.length) { try { ORD = await window.api.ordersDetail(false, 30); buildQty(); } catch { /* */ } }
   renderPalette();
 }
 function closePalette() { $('#palBg').classList.add('hidden'); }

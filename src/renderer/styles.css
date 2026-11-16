@@ -678,3 +678,14 @@ body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacin
 .kargo-table tr.sel td, .ord-table tr.sel td { background: rgba(255, 106, 0, .06) !important; }
 .kargo-table tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 input[type=checkbox] { accent-color: var(--accent); }
+
+/* Birden fazla urunlu siparis isareti */
+.multi { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #1a1300; background: #ffd23f; white-space: nowrap; box-shadow: 0 0 0 3px rgba(255, 210, 63, .14); }
+tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
+.kargo-table tr.is-multi td:nth-child(2) { box-shadow: none; }
+.kargo-table tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
+.paper .slot.multi { outline: 2px solid #ffd23f; outline-offset: -2px; z-index: 1; }
+.paper .slot.multi span { background: #ffd23f; color: #1a1300; }
+.od-multi { display: flex; flex-direction: column; gap: 2px; padding: 11px 14px; border-radius: 10px; background: rgba(255, 210, 63, .12); border: 1px solid rgba(255, 210, 63, .55); }
+.od-multi b { color: #ffd23f; font-size: 14.5px; }
+.od-multi span { color: #e9dfb8; font-size: 12.5px; }
