@@ -115,6 +115,15 @@ async function loadOrders() {
 }
 
 // ---------- Yerlesim ----------
+// Cerceve rengi dosya adindan: 2276-30x42-Naturel-Urun-1.png -> Naturel
+const FRAME_TR = { CERCEVESIZ: 'Çerçevesiz', NATUREL: 'Naturel', SIYAH: 'Siyah', BEYAZ: 'Beyaz', CEVIZ: 'Ceviz', ALTIN: 'Altın', GUMUS: 'Gümüş' };
+function frameOf(i) {
+  const raw = i.color || (String(i.fileName || i.name || '').match(/^\d+-[^-]+-([^-.]+)/) || [])[1] || '';
+  if (!raw || /^renk-?yok$/i.test(raw)) return null;
+  const key = raw.toUpperCase().replace(/[^A-Z]/g, '');
+  const cls = { SIYAH: 'f-black', BEYAZ: 'f-white', NATUREL: 'f-wood', CEVIZ: 'f-walnut', CERCEVESIZ: 'f-none' }[key] || 'f-other';
+  return { label: FRAME_TR[key] || raw, cls };
+}
 function paperHtml(sheet, items) {
   // Yazici son ogeden sonra keser: onizleme de basilacak uzunlukta gosterilir
   const used = items.length ? Math.max(...items.map((i) => i.yMm + i.hMm)) + (CFG ? Number(CFG.print.marginMm) || 0 : 0) : sheet.lengthMm;
@@ -127,7 +136,8 @@ function paperHtml(sheet, items) {
       ? `<div class="img" style="${bg}width:${(i.hMm / i.wMm) * 100}%;height:${(i.wMm / i.hMm) * 100}%;transform:translate(-50%,-50%) rotate(90deg)"></div>`
       : `<div class="img" style="${bg}width:100%;height:100%;left:0;top:0"></div>`;
     const q = i.card ? 0 : qtyOf(i.order);
-    return `<div class="slot${i.card ? ' card' : ''}${q > 1 ? ' is-multi' : ''}" style="${box}" title="${esc(i.name)}${q > 1 ? ` — bu siparişte ${q} ürün var` : ''}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}${q > 1 ? ` · ${q} ürün` : ''}</span></div>`;
+    const fr = i.card ? null : frameOf(i);
+    return `<div class="slot${i.card ? ' card' : ''}${q > 1 ? ' is-multi' : ''}" style="${box}" title="${esc(i.name)}${q > 1 ? ` — bu siparişte ${q} ürün var` : ''}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}${q > 1 ? ` · ${q} ürün` : ''}</span>${fr ? `<em class="frame ${fr.cls}" title="Çerçeve rengi">${esc(fr.label)}</em>` : ''}</div>`;
   }).join('');
   return `<div class="paper" style="aspect-ratio:${w}/${h}">${slots}</div>`;
 }

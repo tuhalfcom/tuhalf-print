@@ -724,3 +724,12 @@ tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .od-addr { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); user-select: text; }
 .od-addr span { color: #c9cbd0; font-size: 12.5px; }
 @media (max-width: 1000px) { .od { width: 94vw; } }
+
+/* Cerceve rengi etiketi (sayfa onizlemesinde sag alt) */
+.paper .slot em.frame { position: absolute; right: 3px; bottom: 3px; font-style: normal; font-size: 9px; font-weight: 700; padding: 0 5px; border-radius: 3px; line-height: 15px; border: 1px solid rgba(0,0,0,.35); z-index: 2; }
+.paper .slot em.f-black { background: #111; color: #fff; border-color: rgba(255,255,255,.55); }
+.paper .slot em.f-white { background: #fff; color: #111; }
+.paper .slot em.f-wood { background: #d9b382; color: #2b1a06; }
+.paper .slot em.f-walnut { background: #6b4527; color: #fff; }
+.paper .slot em.f-none { background: #e5e7eb; color: #333; border-style: dashed; }
+.paper .slot em.f-other { background: #f3f4f6; color: #111; }
