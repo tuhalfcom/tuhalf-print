@@ -564,9 +564,9 @@ ipcMain.handle('today-stats', (_e, force) => todayStats(force));
 
 // ---------- Telefondan takip ----------
 // Durum ozeti etiket sunucusuna (Cloudflare) gonderilir; telefon gizli baglantiyla okur.
-let phoneT = null, phoneLast = 0, phoneBusy = false;
+let phoneT = null, phoneLast = 0, phoneTry = 0, phoneBusy = false;
 function phoneOn() { if (!config || !config.data) return false; const k = config.data.kargo || {}; return !!(k.codUrl && k.codKey) && (config.data.phone || {}).enabled !== false; }
-function phoneSoon(ms = 20000) { if (!phoneOn()) return; clearTimeout(phoneT); phoneT = setTimeout(() => phonePush().catch(() => {}), Math.max(ms, 60000 - (Date.now() - phoneLast))); }
+function phoneSoon(ms = 20000) { if (!phoneOn()) return; clearTimeout(phoneT); phoneT = setTimeout(() => phonePush().catch(() => {}), Math.max(ms, 60000 - (Date.now() - phoneTry))); }
 async function phoneSnapshot() {
   const d0 = new Date(); d0.setHours(0, 0, 0, 0); const t0 = d0.getTime();
   const root = downloadDir();
@@ -585,8 +585,9 @@ async function phoneSnapshot() {
         const no = f.info && f.info.order; if (!no) continue;
         const sh = idx.get(f.name) || [];
         const printed = f.status === 'arranged' && sh.length > 0 && sh.every((x) => x.printedAt);
-        const cur = local.get(no) || { all: true, any: false, arranged: true };
+        const cur = local.get(no) || { all: true, any: false, arranged: true, files: [] };
         cur.any = true; cur.all = cur.all && printed; cur.arranged = cur.arranged && f.status === 'arranged';
+        cur.files.push({ olcu: f.info.size || '', renk: f.info.color || '', adet: f.info.qty || 1, path: f.path });
         local.set(no, cur);
       }
     }
@@ -609,24 +610,56 @@ async function phoneSnapshot() {
   } catch (e) { out.kargo = { hata: e.message }; }
   // Son siparisler
   const orders = (detailCache && detailCache.data.orders) || (statsCache && statsCache.data.orders) || [];
-  out.siparisler = orders.slice().sort((a, b) => b.no - a.no).slice(0, 20).map((o) => {
+  const since = Date.now() - 3 * 864e5;
+  out.siparisler = orders.slice().sort((a, b) => b.no - a.no).filter((o, i) => i < 20 || (Date.parse(o.createdAt) || 0) > since).slice(0, 80).map((o) => {
     const l = local.get(o.no);
     const kapida = (o.gateways || []).concat(o.shipping || '').some((x) => /cash on delivery|\bcod\b|kap[ıi]da/i.test(x));
     const baski = holdReason(o) ? 'tutuldu' : !l ? 'dosyayok' : l.all ? 'basildi' : l.arranged ? 'dizildi' : 'bekliyor';
-    return { no: o.no, ad: o.name, sehir: o.city, tarih: Date.parse(o.createdAt) || null, tutar: o.total, odeme: o.financial === 'PAID' ? 'Ödendi' : (o.gateways || []).join(', ') || o.financial, odendi: o.financial === 'PAID', kapida, urun: (o.items || []).reduce((a, x) => a + (Number(x.qty) || 1), 0), baski, iptal: !!o.cancelled };
+    const dosyalar = l ? l.files.slice(0, 8).map((f) => ({ olcu: f.olcu, renk: f.renk, adet: f.adet, path: f.path })) : [];
+    return { dosyalar, no: o.no, ad: o.name, sehir: o.city, tarih: Date.parse(o.createdAt) || null, tutar: o.total, odeme: o.financial === 'PAID' ? 'Ödendi' : (o.gateways || []).join(', ') || o.financial, odendi: o.financial === 'PAID', kapida, urun: (o.items || []).reduce((a, x) => a + (Number(x.qty) || 1), 0), baski, iptal: !!o.cancelled };
   });
   out.olaylar = logs.slice(-12).reverse().map((e) => ({ t: e.t, seviye: e.level, mesaj: e.msg }));
   return out;
 }
+// Tasarim kucuk resimleri telefona bir kez yuklenir (ayni resim tekrar gonderilmez)
+let phoneImgs = null;
+async function phoneImages(base, key, snap) {
+  if (!phoneImgs) {
+    try { const r = await fetch(`${base}/api/durum-resimler`, { headers: { Authorization: 'Bearer ' + key } }); phoneImgs = new Set(r.ok ? (await r.json()).adlar || [] : []); } catch { phoneImgs = new Set(); }
+  }
+  let sent = 0;
+  for (const o of snap.siparisler || []) for (const f of o.dosyalar || []) {
+    const p = f.path; delete f.path;
+    if (!p) continue;
+    try {
+      const t = await thumb(p, 480);
+      if (!t) continue;
+      const buf = await fs.promises.readFile(t);
+      const ad = crypto.createHash('md5').update(buf).digest('hex');
+      if (!phoneImgs.has(ad) && sent < 40) {
+        const r = await fetch(`${base}/api/durum-resim?ad=${ad}`, { method: 'POST', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'image/jpeg' }, body: buf });
+        if (r.ok) { phoneImgs.add(ad); sent++; }
+      }
+      if (phoneImgs.has(ad)) f.resim = ad;
+    } catch { /* */ }
+  }
+}
+let phoneHash = '';
 async function phonePush() {
   if (!phoneOn() || phoneBusy) return;
-  phoneBusy = true;
+  phoneBusy = true; phoneTry = Date.now();
   try {
     const k = config.data.kargo;
-    const body = JSON.stringify(await phoneSnapshot());
-    const r = await fetch(`${String(k.codUrl).trim().replace(/\/+$/, '')}/api/durum`, { method: 'POST', headers: { Authorization: 'Bearer ' + k.codKey, 'Content-Type': 'application/json' }, body });
+    const base = String(k.codUrl).trim().replace(/\/+$/, '');
+    const snap = await phoneSnapshot();
+    await phoneImages(base, k.codKey, snap);
+    // Degisiklik yoksa en fazla 10 dakikada bir gonder (sunucu yazma kotasini korur)
+    const h = crypto.createHash('md5').update(JSON.stringify({ ...snap, sonKontrol: 0, sonrakiKontrol: 0 })).digest('hex');
+    if (h === phoneHash && Date.now() - phoneLast < 10 * 60000) return;
+    const r = await fetch(`${base}/api/durum`, { method: 'POST', headers: { Authorization: 'Bearer ' + k.codKey, 'Content-Type': 'application/json' }, body: JSON.stringify(snap) });
     phoneLast = Date.now();
-    if (!r.ok && Date.now() - (phonePush.errAt || 0) > 3600e3) { phonePush.errAt = Date.now(); log('warn', `Telefon durumu gönderilemedi (HTTP ${r.status}).`); }
+    if (r.ok) phoneHash = h;
+    else if (Date.now() - (phonePush.errAt || 0) > 3600e3) { phonePush.errAt = Date.now(); log('warn', `Telefon durumu gönderilemedi (HTTP ${r.status}).`); }
   } catch (e) { phoneLast = Date.now(); if (Date.now() - (phonePush.errAt || 0) > 3600e3) { phonePush.errAt = Date.now(); log('warn', 'Telefon durumu gönderilemedi: ' + e.message); } }
   finally { phoneBusy = false; }
 }
