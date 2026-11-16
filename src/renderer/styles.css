@@ -733,3 +733,10 @@ tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .paper .slot em.f-walnut { background: #6b4527; color: #fff; }
 .paper .slot em.f-none { background: #e5e7eb; color: #333; border-style: dashed; }
 .paper .slot em.f-other { background: #f3f4f6; color: #111; }
+
+/* Telefondan takip */
+.phone-box { display: grid; grid-template-columns: 200px 1fr; gap: 18px; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.phone-qr { width: 200px; height: 200px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; text-align: center; padding: 10px; }
+.phone-qr img { width: 180px; height: 180px; border-radius: 6px; background: #fff; display: block; }
+.phone-info p { margin: 0 0 8px; line-height: 1.5; }
+.phone-actions { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }

@@ -202,6 +202,7 @@
         <a data-goto="set-pc">Bilgisayarlar</a>
         <a data-goto="set-print">Baskı</a>
         <a data-goto="set-kargo">Kargo fişleri</a>
+        <a data-goto="set-phone">Telefondan takip</a>
         <a data-goto="set-keys">Kısayollar</a>
         <a data-goto="set-reset">Sıfırlama</a>
       </nav>
@@ -285,6 +286,19 @@
         <b>Ayar dosyası</b>
         <p class="muted small">Ofisteki diğer bilgisayarları tek seferde kurmak için: bir bilgisayarda “Dışa aktar” deyip dosyayı diğerlerinde “İçe aktar” ile açın. Dosyada Shopify ve kargo anahtarları vardır; paylaşmayın, iş bitince silin.</p>
         <div class="update-actions"><button type="button" class="btn small" id="btnImport">İçe aktar…</button><button type="button" class="btn small" id="btnExport">Dışa aktar…</button></div>
+      </div>
+      <h4 id="set-phone">Telefondan takip</h4>
+      <div class="phone-box">
+        <div class="phone-qr" id="phoneQr"><span class="muted small">Bağlantıyı göstermek için düğmeye basın.</span></div>
+        <div class="phone-info">
+          <p>Telefonun kamerasıyla bu kodu okutun; açılan sayfayı ana ekrana ekleyin. Bugünkü siparişler, basılmayı bekleyenler, kargo fişleri, adres hataları ve Geliver bakiyesi görünür; sayfa her dakika yenilenir.</p>
+          <p class="muted small">Bağlantı gizlidir; şifre gibi düşünün, başkasıyla paylaşmayın. Sayfada sadece ad ve şehir görünür, adres ve telefon gösterilmez.</p>
+          <div class="phone-actions">
+            <button type="button" class="btn small" id="btnPhoneLink">Telefon bağlantısını göster</button>
+            <button type="button" class="btn ghost small hidden" id="btnPhoneCopy">Bağlantıyı kopyala</button>
+          </div>
+          <label class="check"><input type="checkbox" id="phoneOn" checked /> Bu bilgisayar durumu telefona göndersin</label>
+        </div>
       </div>
       <h4 id="set-keys">Klavye kısayolları</h4>
       <div class="keys">

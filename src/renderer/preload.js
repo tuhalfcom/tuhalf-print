@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('api', {
   labelMark: (keys, on) => ipcRenderer.invoke('label-mark', keys, on),
   openUrl: (u) => ipcRenderer.invoke('open-url', u),
   settingsExport: () => ipcRenderer.invoke('settings-export'),
+  phoneLink: () => ipcRenderer.invoke('phone-link'),
+  phoneEnable: (on) => ipcRenderer.invoke('phone-enable', on),
   settingsImport: () => ipcRenderer.invoke('settings-import'),
   openInPhotoshop: (p) => ipcRenderer.invoke('open-in-ps', p),
   pickCard: () => ipcRenderer.invoke('pick-card'),

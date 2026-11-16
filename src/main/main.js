@@ -97,7 +97,7 @@ function log(level, msg) {
   } catch { /* */ }
   send('log', e);
 }
-function send(ch, data) { if (win && !win.isDestroyed()) win.webContents.send(ch, data); }
+function send(ch, data) { if (win && !win.isDestroyed()) win.webContents.send(ch, data); if (ch === 'refresh' || ch === 'kargo-updated') phoneSoon(); }
 function pushStatus() { send('status', publicStatus()); }
 function publicStatus() { return { ...status, platform: process.platform, version: app.getVersion() }; }
 function notify(title, body) { try { if (Notification.isSupported()) new Notification({ title, body, icon: ICON }).show(); } catch { /* */ } }
@@ -541,7 +541,7 @@ ipcMain.handle('orders-detail', async (_e, force, daysArg) => {
 
 // ---------- Gunun siparis sayisi (Bugun / Siparisler / Kargo fisleri basliklarinda) ----------
 let statsCache = null;
-ipcMain.handle('today-stats', async (_e, force) => {
+async function todayStats(force) {
   const c = config.data;
   if (!(c.shop && c.clientId && c.clientSecret)) return { error: 'Shopify bağlı değil' };
   try {
@@ -559,7 +559,93 @@ ipcMain.handle('today-stats', async (_e, force) => {
     const yestSoFar = yest.filter((o) => Date.parse(o.createdAt) - y0 <= nowOfDay).length;
     return { today: today.length, revenue: today.reduce((a, o) => a + (Number(o.total) || 0), 0), yesterday: yest.length, yesterdaySoFar: yestSoFar, at: Date.now() };
   } catch (e) { return { error: e.message }; }
+}
+ipcMain.handle('today-stats', (_e, force) => todayStats(force));
+
+// ---------- Telefondan takip ----------
+// Durum ozeti etiket sunucusuna (Cloudflare) gonderilir; telefon gizli baglantiyla okur.
+let phoneT = null, phoneLast = 0, phoneBusy = false;
+function phoneOn() { if (!config || !config.data) return false; const k = config.data.kargo || {}; return !!(k.codUrl && k.codKey) && (config.data.phone || {}).enabled !== false; }
+function phoneSoon(ms = 20000) { if (!phoneOn()) return; clearTimeout(phoneT); phoneT = setTimeout(() => phonePush().catch(() => {}), Math.max(ms, 60000 - (Date.now() - phoneLast))); }
+async function phoneSnapshot() {
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0); const t0 = d0.getTime();
+  const root = downloadDir();
+  const out = { istasyon: stationName(), surum: app.getVersion(), sonKontrol: status.lastCheck, sonrakiKontrol: status.nextCheck };
+  const st = await todayStats(false).catch(() => null);
+  if (st && !st.error) out.bugun = { siparis: st.today, ciro: st.revenue, dunAyniSaat: st.yesterdaySoFar, dun: st.yesterday };
+  // Baski
+  const local = new Map();
+  try {
+    const p = plan(false);
+    let hazir = 0;
+    if (root && fs.existsSync(root)) {
+      for (const sh of F.listSheets(root).slice(0, 60)) if (!(state.data.printed || {})[sh.path] && sh.mtime > Date.now() - 3 * 864e5) hazir++;
+      const idx = F.sheetIndex(root, state.data.printed);
+      for (const g of F.listOrders(root, 3)) for (const f of g.files) {
+        const no = f.info && f.info.order; if (!no) continue;
+        const sh = idx.get(f.name) || [];
+        const printed = f.status === 'arranged' && sh.length > 0 && sh.every((x) => x.printedAt);
+        const cur = local.get(no) || { all: true, any: false, arranged: true };
+        cur.any = true; cur.all = cur.all && printed; cur.arranged = cur.arranged && f.status === 'arranged';
+        local.set(no, cur);
+      }
+    }
+    out.baski = { bekleyen: p.count, sayfa: p.sheets.length, tutulan: p.held.length, hazirBasilmadi: hazir, bugunBasilan: Object.values(state.data.printed || {}).filter((t) => t >= t0).length };
+  } catch { /* */ }
+  // Kargo
+  try {
+    const k = await loadKargo(false);
+    const pay = state.data.pay || {};
+    out.kargo = {
+      geliverAlinacak: k.geliver.filter((r) => r.kind === 'offer' && !(r.pay && r.pay.hold)).length,
+      havaleBekleyen: k.geliver.filter((r) => r.kind === 'offer' && r.pay && r.pay.hold).length,
+      geliverYazdirilacak: k.geliver.filter((r) => r.kind === 'ready' && !r.printedAt).length,
+      kapidaYazdirilacak: k.cod.filter((r) => !r.printedAt && !r.etiketli && !r.sorun).length,
+      adresHatasi: k.errors.length, bakiye: k.balance, dusukBakiye: k.lowBalance,
+      bugunFis: Object.values(state.data.labelsPrinted || {}).filter((t) => t >= t0).length,
+      hata: [k.geliverError, k.codError].filter(Boolean).join(' · '),
+    };
+    void pay;
+  } catch (e) { out.kargo = { hata: e.message }; }
+  // Son siparisler
+  const orders = (detailCache && detailCache.data.orders) || (statsCache && statsCache.data.orders) || [];
+  out.siparisler = orders.slice().sort((a, b) => b.no - a.no).slice(0, 20).map((o) => {
+    const l = local.get(o.no);
+    const kapida = (o.gateways || []).concat(o.shipping || '').some((x) => /cash on delivery|\bcod\b|kap[ıi]da/i.test(x));
+    const baski = holdReason(o) ? 'tutuldu' : !l ? 'dosyayok' : l.all ? 'basildi' : l.arranged ? 'dizildi' : 'bekliyor';
+    return { no: o.no, ad: o.name, sehir: o.city, tarih: Date.parse(o.createdAt) || null, tutar: o.total, odeme: o.financial === 'PAID' ? 'Ödendi' : (o.gateways || []).join(', ') || o.financial, odendi: o.financial === 'PAID', kapida, urun: (o.items || []).reduce((a, x) => a + (Number(x.qty) || 1), 0), baski, iptal: !!o.cancelled };
+  });
+  out.olaylar = logs.slice(-12).reverse().map((e) => ({ t: e.t, seviye: e.level, mesaj: e.msg }));
+  return out;
+}
+async function phonePush() {
+  if (!phoneOn() || phoneBusy) return;
+  phoneBusy = true;
+  try {
+    const k = config.data.kargo;
+    const body = JSON.stringify(await phoneSnapshot());
+    const r = await fetch(`${String(k.codUrl).trim().replace(/\/+$/, '')}/api/durum`, { method: 'POST', headers: { Authorization: 'Bearer ' + k.codKey, 'Content-Type': 'application/json' }, body });
+    phoneLast = Date.now();
+    if (!r.ok && Date.now() - (phonePush.errAt || 0) > 3600e3) { phonePush.errAt = Date.now(); log('warn', `Telefon durumu gönderilemedi (HTTP ${r.status}).`); }
+  } catch (e) { phoneLast = Date.now(); if (Date.now() - (phonePush.errAt || 0) > 3600e3) { phonePush.errAt = Date.now(); log('warn', 'Telefon durumu gönderilemedi: ' + e.message); } }
+  finally { phoneBusy = false; }
+}
+setInterval(() => phoneSoon(0), 5 * 60000);
+setTimeout(() => phoneSoon(0), 40000);
+ipcMain.handle('phone-link', async () => {
+  const k = config.data.kargo || {};
+  if (!k.codUrl || !k.codKey) return { error: 'Önce Tercihler › Kargo’da etiket sunucusu ve anahtarı girilmeli.' };
+  try {
+    const r = await fetch(`${String(k.codUrl).trim().replace(/\/+$/, '')}/api/durum-baglanti`, { headers: { Authorization: 'Bearer ' + k.codKey, Accept: 'application/json' } });
+    if (r.status === 404) return { error: 'Etiket sunucusu henüz güncellenmemiş (telefon sayfası yok).' };
+    if (!r.ok) return { error: `Sunucu yanıtı: HTTP ${r.status}` };
+    const j = await r.json();
+    phonePush().catch(() => {});
+    const qr = await require('qrcode').toDataURL(j.url, { margin: 1, width: 360, errorCorrectionLevel: 'M' });
+    return { url: j.url, qr, store: j.depo, enabled: (config.data.phone || {}).enabled !== false };
+  } catch (e) { return { error: e.message }; }
 });
+ipcMain.handle('phone-enable', (_e, on) => { config.set({ phone: { ...(config.data.phone || {}), enabled: !!on } }); if (on) phoneSoon(0); return true; });
 
 // ---------- Kargo fisleri ----------
 let kargoCache = null; // { at, data }

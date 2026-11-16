@@ -254,6 +254,7 @@ function fillSettings(c) {
     if (el.type === 'checkbox') el.checked = !!v;
     else el.value = Array.isArray(v) ? v.join(', ') : (v ?? '');
   }
+  if ($('#phoneOn')) $('#phoneOn').checked = !(c.phone && c.phone.enabled === false);
 }
 function readSettings() {
   const out = { print: {}, card: {}, kargo: {}, roles: {} };
@@ -733,6 +734,22 @@ async function loadPrinters() {
   if (cur && !list.some((p) => p.name === cur)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(cur)}">${esc(cur)} (bulunamadı)</option>`);
   sel.value = cur;
 }
+// Telefondan takip
+let PHONE_URL = '';
+$('#btnPhoneLink').onclick = async () => {
+  const b = $('#btnPhoneLink'); b.disabled = true; b.textContent = 'Hazırlanıyor…';
+  try {
+    const r = await window.api.phoneLink();
+    if (!r || r.error) { $('#phoneQr').innerHTML = `<span class="small" style="color:var(--bad)">${esc((r && r.error) || 'Bağlantı alınamadı')}</span>`; return; }
+    PHONE_URL = r.url;
+    $('#phoneQr').innerHTML = `<img src="${r.qr}" alt="Telefon bağlantısı QR kodu">`;
+    $('#btnPhoneCopy').classList.remove('hidden');
+    $('#phoneOn').checked = r.enabled !== false;
+    if (r.store === false) toast('Sunucuda durum deposu henüz kurulmamış; sayfa boş görünebilir.', true);
+  } finally { b.disabled = false; b.textContent = 'Telefon bağlantısını göster'; }
+};
+$('#btnPhoneCopy').onclick = () => { if (PHONE_URL) { navigator.clipboard.writeText(PHONE_URL); toast('Bağlantı kopyalandı'); } };
+$('#phoneOn').onchange = (e) => window.api.phoneEnable(e.target.checked);
 $('#btnExport').onclick = async () => { const r = await window.api.settingsExport(); if (r && r.ok) toast('Ayarlar kaydedildi: ' + r.file); };
 $('#btnImport').onclick = doImport;
 
