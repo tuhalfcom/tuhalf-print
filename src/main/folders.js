@@ -33,15 +33,34 @@ function listDayFolders(root) {
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
+// Klasor listesi onbellegi: klasorun degisim zamani ayniysa ve kisa sure gectiyse tekrar taranmaz
+const IMG_CACHE = new Map();
 function listImages(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true })
+  let dst;
+  try { dst = fs.statSync(dir); } catch { return []; }
+  const c = IMG_CACHE.get(dir);
+  if (c && c.m === dst.mtimeMs && Date.now() - c.t < 15000) return c.list.map((x) => ({ ...x }));
+  const list = fs.readdirSync(dir, { withFileTypes: true })
     .filter((f) => f.isFile() && IMG_RE.test(f.name) && !f.name.startsWith('.'))
     .map((f) => {
       const p = path.join(dir, f.name);
-      const st = fs.statSync(p);
+      let st; try { st = fs.statSync(p); } catch { return null; }
       return { name: f.name, path: p, mtime: st.mtimeMs, bytes: st.size, info: parseName(f.name) };
-    });
+    }).filter(Boolean);
+  IMG_CACHE.set(dir, { m: dst.mtimeMs, t: Date.now(), list });
+  if (IMG_CACHE.size > 600) IMG_CACHE.delete(IMG_CACHE.keys().next().value);
+  return list.map((x) => ({ ...x }));
+}
+const META_CACHE = new Map();
+function readMeta(p) {
+  try {
+    const m = fs.statSync(p).mtimeMs;
+    const c = META_CACHE.get(p);
+    if (c && c.m === m) return c.v;
+    const v = JSON.parse(fs.readFileSync(p, 'utf8'));
+    META_CACHE.set(p, { m, v });
+    return v;
+  } catch { return null; }
 }
 
 // Siparisler paneli: son N gun klasoru, dizilecek + dizildi
@@ -90,8 +109,7 @@ function listSheets(root) {
     if (!fs.existsSync(dir)) continue;
     for (const n of fs.readdirSync(dir).filter((x) => /^Sayfa-\d+\.psd$/i.test(x)).sort().reverse()) {
       const p = path.join(dir, n);
-      let meta = null;
-      try { meta = JSON.parse(fs.readFileSync(p.replace(/\.psd$/i, '.json'), 'utf8')); } catch { /* yok */ }
+      const meta = readMeta(p.replace(/\.psd$/i, '.json'));
       out.push({ name: n.replace(/\.psd$/i, ''), path: p, folder: f.name, meta, mtime: fs.statSync(p).mtimeMs });
     }
   }

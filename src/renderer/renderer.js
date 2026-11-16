@@ -5,7 +5,7 @@ const eyeBtn = (no) => `<button class="eye" data-od="${esc(no)}" title="Sipariş
 let ORDQ = new Map();
 function buildQty() { ORDQ = new Map(); for (const o of (typeof ORD !== 'undefined' && ORD.rows) || []) if (o.items && o.items.length) ORDQ.set(Number(o.no), o.items.reduce((a, i) => a + (Number(i.qty) || 1), 0)); }
 const qtyOf = (no) => ORDQ.get(Number(no)) || 0;
-const multiBadge = (no) => { const n = qtyOf(no); return n > 1 ? `<span class="multi" title="Bu siparişte ${n} ürün var — hepsini birlikte hazırlayıp aynı pakete koyun">${n} ürün</span>` : ''; };
+const multiBadge = (no) => { const n = qtyOf(no); return n > 1 ? `<span class="qty-badge" title="Bu siparişte ${n} ürün var — hepsini birlikte hazırlayıp aynı pakete koyun">${n} ürün</span>` : ''; };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—');
 let CFG = null, STATUS = {}, SHEETS = [], PLAN = null, ORDR = null, PSFOUND = null;
@@ -213,7 +213,14 @@ function sheetCard(s) {
 }
 $('#sheetTab').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (!b) return; SHEET_TAB = b.dataset.t; for (const x of $('#sheetTab').children) x.classList.toggle('active', x === b); loadSheets(); };
 
-const refreshAll = () => Promise.all([loadOrders(), loadPlan(), loadSheets(), VIEW === 'orders' ? loadOrdersPage(false, true) : null]).then(() => renderHome()).catch((e) => toast(e.message, true));
+// Ust uste gelen yenileme isteklerini tek seferde topla (ayni anda en fazla bir yenileme)
+let RF_RUN = null, RF_AGAIN = false, RF_T = null;
+const refreshNow = () => Promise.all([loadOrders(), loadPlan(), loadSheets(), VIEW === 'orders' ? loadOrdersPage(false, true) : null]).then(() => renderHome()).catch((e) => toast(e.message, true));
+function refreshAll() {
+  if (RF_RUN) { RF_AGAIN = true; return RF_RUN; }
+  RF_RUN = refreshNow().finally(() => { RF_RUN = null; if (RF_AGAIN) { RF_AGAIN = false; clearTimeout(RF_T); RF_T = setTimeout(refreshAll, 250); } });
+  return RF_RUN;
+}
 
 // ---------- Etkinlik ----------
 const LOGS = [];
@@ -1029,8 +1036,8 @@ async function openOrder(no) {
   // baski dosyalari (buyuk onizleme solda)
   parts.push(sec(`Baskı dosyaları (${d.files.length})`, d.files.length ? `<div class="od-files">${d.files.map((f, i) => `<button class="od-file" data-odfocus="${i}"><b>${esc(f.size || '?')}</b> ${esc(f.color || '')}${f.qty > 1 ? ` · ${f.qty} adet` : ''}<span>${f.status === 'arranged' ? 'sayfaya dizildi' : 'dizilmeyi bekliyor'}</span></button>`).join('')}</div>` : '<div class="muted small">Bu siparişin dosyası inmemiş. “Dosyayı yeniden indir” ile deneyin.</div>'));
   const multi = d.files.length > 1;
-  $('#odPreview').className = 'od-preview' + (multi ? ' multi' : '') + (d.files.length ? '' : ' empty');
-  $('#odPreview').innerHTML = d.files.length ? d.files.map((f, i) => `<figure class="od-art" id="odArt${i}"><div class="od-sheet"><img src="${window.api.fileUrl(f.path)}" alt="${esc(f.name)}" loading="lazy"></div><figcaption><b>${esc(f.size || '?')} ${esc(f.color || '')}</b><span>${esc(f.name)}</span><button class="btn ghost small" data-show="${esc(f.path)}">Klasörde göster</button></figcaption></figure>`).join('')
+  $('#odPreview').className = 'od-preview' + (multi ? ' is-multi' : '') + (d.files.length ? '' : ' empty');
+  $('#odPreview').innerHTML = d.files.length ? d.files.map((f, i) => `<figure class="od-art" id="odArt${i}"><div class="od-sheet"><img src="${window.api.fileUrl(f.preview || f.thumb || f.path)}" alt="${esc(f.name)}" decoding="async"></div><figcaption><b>${esc(f.size || '?')} ${esc(f.color || '')}</b><span>${esc(f.name)}</span><button class="btn ghost small" data-show="${esc(f.path)}">Klasörde göster</button></figcaption></figure>`).join('')
     : '<div class="od-none"><b>Tasarım dosyası yok</b><span>Sipariş gelince ya da “Dosyayı yeniden indir” ile burada görünür.</span></div>';
   if (d.sheets.length) parts.push(sec('Baskı sayfaları', d.sheets.map((x) => `<div class="od-line"><span>${esc(dayLabel(x.folder))} · <b>${esc(x.sheet)}</b></span>${x.printedAt ? `<span class="chip printed">Basıldı ${fmtTime(x.printedAt)}${x.printedBy ? ' · ' + esc(x.printedBy) : ''}</span>` : '<span class="chip ready">Basılmadı</span>'}</div>`).join('')));
   // kargo

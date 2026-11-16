@@ -251,7 +251,10 @@ function plan(force) {
   const { bad, newestFolder } = all;
   const held = [], items = [];
   for (const it of all.items) { const h = holdOf(it.order); if (h) held.push({ name: it.name, fileName: it.fileName, order: it.order, reason: h }); else items.push(it); }
-  const res = packAll(items, packCfg(), { force: !!force });
+  const pc = packCfg();
+  const memoKey = JSON.stringify([items.map((i) => i.id + ':' + i.w + 'x' + i.h + (i.lockPortrait ? 'L' : '')), pc, !!force]);
+  const res = plan.memo && plan.memo.key === memoKey ? plan.memo.res : packAll(items, pc, { force: !!force });
+  plan.memo = { key: memoKey, res };
   const sheets = res.sheets.map((s) => ({
     widthMm: s.width, lengthMm: s.length, cards: s.cards || 0,
     items: s.items.map((p) => ({ name: p.item.name, file: p.item.file, fileName: p.item.fileName || '', order: p.item.order || '',
@@ -352,21 +355,43 @@ async function printSheets(paths) {
 }
 
 // ---------------- Kucuk resimler ----------------
-function thumb(file) {
+// Onizleme/kucuk resimler: buyuk PNG'ler ana surecte senkron cozulmesin diye
+// isletim sisteminin kucuk resim servisi (Windows Shell) ile arka planda uretilir ve onbellege alinir.
+const THUMBS = new Map();
+let thumbRunning = 0; const thumbWait = [];
+const thumbSlot = () => new Promise((ok) => { if (thumbRunning < 3) { thumbRunning++; ok(); } else thumbWait.push(ok); });
+const thumbFree = () => { const n = thumbWait.shift(); if (n) n(); else thumbRunning--; };
+async function thumb(file, width = 360) {
+  if (!file) return null;
   try {
-    const st = fs.statSync(file);
-    const key = crypto.createHash('md5').update(path.basename(file) + st.size).digest('hex');
+    const st = await fs.promises.stat(file);
+    const mk = `${file}|${st.size}|${st.mtimeMs}|${width}`;
+    if (THUMBS.has(mk)) return THUMBS.get(mk);
+    const key = crypto.createHash('md5').update(path.basename(file) + st.size + 'w' + width).digest('hex');
     const dir = path.join(app.getPath('userData'), 'thumbs');
     const out = path.join(dir, key + '.jpg');
     if (!fs.existsSync(out)) {
-      const img = nativeImage.createFromPath(file);
-      if (img.isEmpty()) return null;
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(out, img.resize({ width: 360, quality: 'good' }).toJPEG(82));
+      await thumbSlot();
+      try {
+        let img = null;
+        if (process.platform === 'win32' || process.platform === 'darwin') {
+          try { img = await nativeImage.createThumbnailFromPath(file, { width, height: Math.round(width * 1.6) }); } catch { img = null; }
+        }
+        if (!img || img.isEmpty()) {
+          const full = nativeImage.createFromPath(file);
+          if (full.isEmpty()) return null;
+          img = full.resize({ width, quality: 'good' });
+        } else if (img.getSize().width > width * 1.05) img = img.resize({ width, quality: 'good' });
+        await fs.promises.mkdir(dir, { recursive: true });
+        await fs.promises.writeFile(out, img.toJPEG(84));
+      } finally { thumbFree(); }
     }
+    THUMBS.set(mk, out);
+    if (THUMBS.size > 3000) THUMBS.delete(THUMBS.keys().next().value);
     return out;
   } catch { return null; }
 }
+const thumbAll = (list, getFile, setKey = 'thumb', width) => Promise.all(list.map(async (x) => { x[setKey] = await thumb(getFile(x), width); }));
 
 // ---------------- IPC ----------------
 const MASK = '••••••••';
@@ -381,7 +406,7 @@ function safeConfig() {
 ipcMain.handle('init', () => ({ config: safeConfig(), status: publicStatus(), logs, photoshop: PS.findPhotoshop(config.data.photoshopPath), update: updater.status() }));
 ipcMain.handle('update-check', () => updater.check(true));
 ipcMain.handle('update-install', () => updater.install());
-ipcMain.handle('orders', () => {
+ipcMain.handle('orders', async () => {
   const root = downloadDir();
   const exists = !!root && fs.existsSync(root);
   const groups = exists ? F.listOrders(root, 7) : [];
@@ -393,7 +418,6 @@ ipcMain.handle('orders', () => {
   try { if (exists) waiting = new Set(plan(false).waitingFiles); } catch { /* */ }
   for (const g of groups) for (const f of g.files) {
     f.waiting = f.status === 'pending' && waiting.has(f.name);
-    f.thumb = thumb(f.path);
     f.isNew = f.mtime > seenAt;
     f.hold = f.status === 'pending' ? holdOf(f.info && f.info.order) : null;
     const sh = idx.get(f.name) || [];
@@ -404,22 +428,28 @@ ipcMain.handle('orders', () => {
     f.printedAt = f.printed ? Math.max(...sh.map((x) => x.printedAt)) : null;
     f.partial = !allPlaced && (arranged[f.name] || 0) > 0 ? `${arranged[f.name]}/${qty} dizildi` : '';
   }
+  await thumbAll(groups.flatMap((g) => g.files), (f) => f.path);
   const newCount = groups.reduce((a, g) => a + g.files.filter((f) => f.isNew).length, 0);
   return { root, exists, groups, newCount };
 });
-ipcMain.handle('plan', (_e, force) => {
+ipcMain.handle('plan', async (_e, force) => {
   const p = plan(force);
-  for (const s of p.sheets) for (const i of s.items) i.thumb = thumb(i.file);
+  await thumbAll(p.sheets.flatMap((s) => s.items), (i) => i.file);
   return p;
 });
-ipcMain.handle('sheets', () => {
+ipcMain.handle('sheets', async () => {
   const thumbs = new Map();
   for (const g of F.listOrders(downloadDir(), 30)) for (const f of g.files) thumbs.set(f.name, f.path);
-  return F.listSheets(downloadDir()).slice(0, 40).map((s) => {
-    const cardThumb = config.data.card && config.data.card.file && fs.existsSync(config.data.card.file) ? thumb(config.data.card.file) : null;
-    if (s.meta) for (const i of s.meta.items) { if (i.card) { i.thumb = cardThumb; continue; } const p = thumbs.get(i.fileName); i.thumb = p ? thumb(p) : null; }
-    return { ...s, printedAt: (state.data.printed || {})[s.path] || null, printedBy: (state.data.printedBy || {})[s.path] || '' };
+  const cardThumb = config.data.card && config.data.card.file && fs.existsSync(config.data.card.file) ? await thumb(config.data.card.file) : null;
+  const list = F.listSheets(downloadDir()).slice(0, 40);
+  const items = [];
+  const out = list.map((s) => {
+    const meta = s.meta ? { ...s.meta, items: (s.meta.items || []).map((i) => ({ ...i })) } : null;
+    if (meta) for (const i of meta.items) { if (i.card) i.thumb = cardThumb; else items.push(i); }
+    return { ...s, meta, printedAt: (state.data.printed || {})[s.path] || null, printedBy: (state.data.printedBy || {})[s.path] || '' };
   });
+  await thumbAll(items, (i) => thumbs.get(i.fileName));
+  return out;
 });
 ipcMain.handle('check-now', () => checkNow());
 // Siparis detay paneli: tek sipariste dosyalar, sayfalar, odeme, kargo ve adres bir arada
@@ -433,10 +463,11 @@ ipcMain.handle('order-info', async (_e, no) => {
       const seen = new Set();
       for (const g of F.listOrders(root, 90)) for (const f of g.files) {
         if (!f.info || f.info.order !== no) continue;
-        out.files.push({ name: f.name, path: f.path, folder: g.name, size: f.info.size, color: f.info.color, qty: f.info.qty, status: f.status, thumb: thumb(f.path) });
+        out.files.push({ name: f.name, path: f.path, folder: g.name, size: f.info.size, color: f.info.color, qty: f.info.qty, status: f.status });
         for (const sh of idx.get(f.name) || []) if (!seen.has(sh.path)) { seen.add(sh.path); out.sheets.push({ ...sh, printedBy: (state.data.printedBy || {})[sh.path] || '' }); }
       }
     }
+    await Promise.all(out.files.map(async (f) => { f.thumb = await thumb(f.path); f.preview = await thumb(f.path, 1100); }));
   } catch (e) { out.fileError = e.message; }
   if (detailCache) out.order = (detailCache.data.orders || []).find((o) => o.no === no) || null;
   if (out.order) out.admin = shopAdminOrder(out.order.gid);
@@ -1022,7 +1053,7 @@ ipcMain.handle('pick-card', async () => {
   send('refresh');
   return { config: safeConfig(), card: out };
 });
-ipcMain.handle('card-thumb', () => { const c = config.data.card; return c && c.file && fs.existsSync(c.file) ? thumb(c.file) : null; });
+ipcMain.handle('card-thumb', async () => { const c = config.data.card; return c && c.file && fs.existsSync(c.file) ? thumb(c.file) : null; });
 ipcMain.handle('open-path', (_e, p) => shell.openPath(p));
 ipcMain.handle('show-item', (_e, p) => shell.showItemInFolder(p));
 ipcMain.handle('save-config', (_e, patch) => {

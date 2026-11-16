@@ -636,7 +636,7 @@ body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacin
 .od-art { margin: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .od-sheet { background: #fff; padding: 10px; border-radius: 3px; box-shadow: 0 18px 40px rgba(0, 0, 0, .45); display: flex; }
 .od-sheet img { display: block; max-width: 100%; max-height: calc(100vh - 210px); object-fit: contain; }
-.od-preview.multi .od-sheet img { max-height: 62vh; }
+.od-preview.is-multi .od-sheet img { max-height: 62vh; }
 .od-art figcaption { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
 .od-art figcaption b { color: var(--text); font-weight: 600; }
 .od-none { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
@@ -680,7 +680,7 @@ body { font: 13.5px/1.5 "Plex", "Segoe UI", system-ui, sans-serif; letter-spacin
 input[type=checkbox] { accent-color: var(--accent); }
 
 /* Birden fazla urunlu siparis isareti */
-.multi { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #1a1300; background: #ffd23f; white-space: nowrap; box-shadow: 0 0 0 3px rgba(255, 210, 63, .14); }
+.qty-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #1a1300; background: #ffd23f; white-space: nowrap; box-shadow: 0 0 0 3px rgba(255, 210, 63, .14); }
 tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .kargo-table tr.is-multi td:nth-child(2) { box-shadow: none; }
 .kargo-table tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
@@ -717,7 +717,7 @@ tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .od-preview { padding: 16px; gap: 16px; }
 .od-sheet { padding: 6px; }
 .od-sheet img { max-height: min(58vh, 560px); max-width: 100%; }
-.od-preview.multi .od-sheet img { max-height: min(44vh, 420px); }
+.od-preview.is-multi .od-sheet img { max-height: min(44vh, 420px); }
 .od-head { padding: 14px 18px 12px; }
 .od-no { font-size: 21px; }
 .od-body { padding: 14px 16px 20px; gap: 12px; }
