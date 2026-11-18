@@ -308,6 +308,7 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     const { orderNote } = require('../src/main/downloader');
     assert.strictEqual(orderNote({ note: ' Hediye paketi olsun ', customAttributes: [{ key: '_teeinblue', value: 'x' }, { key: 'Hediye notu', value: 'İyi ki doğdun' }, { key: 'utm_source', value: 'ig' }, { key: 'Bos', value: ' ' }] }), 'Hediye paketi olsun\nHediye notu: İyi ki doğdun');
     assert.strictEqual(orderNote({ note: null, customAttributes: [] }), '');
+    assert.strictEqual(orderNote({ note: 'https://app.teeinblue.com/preview/abc\nhttps://cdn.shopify.com/x.png', customAttributes: [{ key: 'Personalization', value: 'https://teeinblue.com/p/1' }, { key: 'Design link', value: 'abc' }] }), '');
   });
   srv.close();
   fs.rmSync(root, { recursive: true, force: true });

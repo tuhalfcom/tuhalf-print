@@ -234,12 +234,17 @@ const detailQuery = (pii) => `query($cursor: String, $search: String) {
 
 // Musterinin siparise biraktigi not + sepet ozellikleri (hediye paketi vb.). "_" ile baslayanlar sistem alanidir.
 function orderNote(o) {
+  // Teeinblue gibi uygulamalar siparise tasarim/onizleme linkleri ekler; bunlar musteri notu degildir.
+  const isLink = (v) => /https?:\/\/|www\.|teeinblue|\.(png|jpe?g|webp|pdf)\b/i.test(v);
   const parts = [];
-  if (o.note && String(o.note).trim()) parts.push(String(o.note).trim());
+  const note = String(o.note || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !isLink(l) && !/^[-_=*•\s]+$/.test(l)).join('\n');
+  if (note) parts.push(note);
+  // Sepet ozelliklerinden sadece musterinin yazdigi hediye/not alanlari
   for (const a of o.customAttributes || []) {
-    if (!a || !a.key || String(a.key).startsWith('_') || a.value == null || String(a.value).trim() === '') continue;
-    if (/^(utm_|fbclid|gclid|ref|landing|session|cart_?token|tracking)/i.test(a.key)) continue;
-    parts.push(`${a.key}: ${String(a.value).trim()}`);
+    const k = String((a && a.key) || ''), v = String((a && a.value) || '').trim();
+    if (!k || k.startsWith('_') || !v || isLink(v) || isLink(k)) continue;
+    if (!/hediye|gift|not|note|mesaj|message|paket|wrap|istek|a[cç][iı]klama/i.test(k)) continue;
+    parts.push(`${k}: ${v}`);
   }
   return parts.join('\n').slice(0, 1000);
 }
