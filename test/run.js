@@ -304,6 +304,11 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
   const r4 = await runDownload({ ...conf, redownloadFrom: 2267 }, done, () => {});
   await t('Yeniden indir: #2267 ve sonrasi tekrar iner, oncekiler inmez (yeni bilgisayar)', () =>
     assert.deepStrictEqual(r4.files.sort(), ['2267-15x21-Cercevesiz-Urun-2.png', '2267-21x30-Beyaz-Urun-1-2Adet.png']));
+  await t('musteri notu: not + sepet ozellikleri, sistem alanlari haric', () => {
+    const { orderNote } = require('../src/main/downloader');
+    assert.strictEqual(orderNote({ note: ' Hediye paketi olsun ', customAttributes: [{ key: '_teeinblue', value: 'x' }, { key: 'Hediye notu', value: 'İyi ki doğdun' }, { key: 'utm_source', value: 'ig' }, { key: 'Bos', value: ' ' }] }), 'Hediye paketi olsun\nHediye notu: İyi ki doğdun');
+    assert.strictEqual(orderNote({ note: null, customAttributes: [] }), '');
+  });
   srv.close();
   fs.rmSync(root, { recursive: true, force: true });
   console.log(`\n${pass} test gecti.`);

@@ -3,8 +3,13 @@ const $ = (s) => document.querySelector(s);
 const eyeBtn = (no) => `<button class="eye" data-od="${esc(no)}" title="Siparişi önizle"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
 // Birden fazla urunlu siparis: personel atlamasin diye her yerde belirgin isaret
 let ORDQ = new Map();
-function buildQty() { ORDQ = new Map(); for (const o of (typeof ORD !== 'undefined' && ORD.rows) || []) if (o.items && o.items.length) ORDQ.set(Number(o.no), o.items.reduce((a, i) => a + (Number(i.qty) || 1), 0)); }
+function buildQty() { buildNotes(); ORDQ = new Map(); for (const o of (typeof ORD !== 'undefined' && ORD.rows) || []) if (o.items && o.items.length) ORDQ.set(Number(o.no), o.items.reduce((a, i) => a + (Number(i.qty) || 1), 0)); }
 const qtyOf = (no) => ORDQ.get(Number(no)) || 0;
+// Musteri notlari (hediye paketi, ozel istek...) — personel atlamasin diye her listede gosterilir
+let NOTES = new Map();
+function buildNotes() { NOTES = new Map(); for (const o of (typeof ORD !== 'undefined' && ORD.rows) || []) if (o.note) NOTES.set(Number(o.no), o.note); }
+const noteOf = (no) => NOTES.get(Number(no)) || '';
+const noteHtml = (no, cls = '') => { const n = noteOf(no); return n ? `<div class="cnote ${cls}" title="${esc(n)}"><b>Müşteri notu</b><span>${esc(n)}</span></div>` : ''; };
 const multiBadge = (no) => { const n = qtyOf(no); return n > 1 ? `<span class="qty-badge" title="Bu siparişte ${n} ürün var — hepsini birlikte hazırlayıp aynı pakete koyun">${n} ürün</span>` : ''; };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = (t) => (t ? new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—');
@@ -137,7 +142,7 @@ function paperHtml(sheet, items) {
       : `<div class="img" style="${bg}width:100%;height:100%;left:0;top:0"></div>`;
     const q = i.card ? 0 : qtyOf(i.order);
     const fr = i.card ? null : frameOf(i);
-    return `<div class="slot${i.card ? ' card' : ''}${q > 1 ? ' is-multi' : ''}" style="${box}" title="${esc(i.name)}${q > 1 ? ` — bu siparişte ${q} ürün var` : ''}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}${q > 1 ? ` · ${q} ürün` : ''}</span>${fr ? `<em class="frame ${fr.cls}" title="Çerçeve rengi">${esc(fr.label)}</em>` : ''}</div>`;
+    return `<div class="slot${i.card ? ' card' : ''}${q > 1 ? ' is-multi' : ''}" style="${box}" title="${esc(i.name)}${q > 1 ? ` — bu siparişte ${q} ürün var` : ''}">${inner}<span>${i.card ? 'Kart' : '#' + esc(i.order)}${q > 1 ? ` · ${q} ürün` : ''}${!i.card && noteOf(i.order) ? ' · Not' : ''}</span>${fr ? `<em class="frame ${fr.cls}" title="Çerçeve rengi">${esc(fr.label)}</em>` : ''}</div>`;
   }).join('');
   return `<div class="paper" style="aspect-ratio:${w}/${h}">${slots}</div>`;
 }
@@ -225,7 +230,10 @@ $('#sheetTab').onclick = (e) => { const b = e.target.closest('button[data-t]'); 
 
 // Ust uste gelen yenileme isteklerini tek seferde topla (ayni anda en fazla bir yenileme)
 let RF_RUN = null, RF_AGAIN = false, RF_T = null;
-const refreshNow = () => Promise.all([loadOrders(), loadPlan(), loadSheets(), VIEW === 'orders' ? loadOrdersPage(false, true) : null]).then(() => renderHome()).catch((e) => toast(e.message, true));
+// Siparis listesi (urun adedi + musteri notu) once yuklenir; baski sirasi ve kargo listeleri bunu kullanir
+const refreshNow = () => loadOrdersPage(false, VIEW === 'orders').catch(() => {})
+  .then(() => Promise.all([loadOrders(), loadPlan(), loadSheets()]))
+  .then(() => { renderHome(); try { if (VIEW === 'kargo' && KG) renderKargo(); } catch { /* */ } }).catch((e) => toast(e.message, true));
 function refreshAll() {
   if (RF_RUN) { RF_AGAIN = true; return RF_RUN; }
   RF_RUN = refreshNow().finally(() => { RF_RUN = null; if (RF_AGAIN) { RF_AGAIN = false; clearTimeout(RF_T); RF_T = setTimeout(refreshAll, 250); } });
@@ -442,10 +450,10 @@ function renderOrdersPage() {
     const ps = printState(o);
     const files = o.local ? o.local.files.map((f) => `<div class="ord-file" data-path="${esc(f.path)}" title="Klasörde göster">${f.isNew ? '<span class="new-dot" title="Yeni"></span>' : ''}<span class="tag">${esc(f.size || '?')}</span><span class="fname">${esc(f.name)}</span></div>`).join('') : '';
     const items = !files && o.items && o.items.length ? `<div class="sub">${o.items.map((i) => esc(`${i.qty}× ${i.title}${i.variant ? ' / ' + i.variant : ''}`)).join('<br>')}</div>` : '';
-    return `<tr class="${o.cancelled ? 'cancelled' : ''}${qtyOf(o.no) > 1 ? ' is-multi' : ''}">
+    return `<tr class="${o.cancelled ? 'cancelled' : ''}${qtyOf(o.no) > 1 ? ' is-multi' : ''}${o.note ? ' has-note' : ''}">
       <td class="no"><div class="no-wrap">${eyeBtn(o.no)}<span>#${o.no}</span>${multiBadge(o.no)}</div>${o.cancelled ? '<div class="sub">İptal</div>' : ''}</td>
       <td>${fmtDate(o.createdAt)}</td>
-      <td>${o.name ? esc(o.name) : '<span class="muted">—</span>'}${o.city ? `<div class="sub">${esc(o.city)}</div>` : ''}</td>
+      <td>${o.name ? esc(o.name) : '<span class="muted">—</span>'}${o.city ? `<div class="sub">${esc(o.city)}</div>` : ''}${noteHtml(o.no)}</td>
       <td>${payCell(o)}</td>
       <td>${o.shipping ? esc(o.shipping) : '<span class="muted">—</span>'}${o.fulfillment ? `<div class="sub">${esc(FUL[o.fulfillment] || o.fulfillment)}</div>` : ''}</td>
       <td class="num">${money(o)}</td>
@@ -650,10 +658,10 @@ function renderKargo() {
     const ship = KTAB === 'cod' ? `<td class="num">${money(r.tutar)}</td>` : `<td>${esc(r.provider || '—')}${r.price != null ? `<div class="sub">${money(r.price)}${r.desi != null ? ' · ' + r.desi + ' desi' : ''}</div>` : ''}</td>`;
     const place = KTAB === 'cod' ? [r.ilce, r.il].filter(Boolean).join(' / ') || r.sehir : [r.district, r.city].filter(Boolean).join(' / ');
     const held = KTAB === 'geliver' && r.kind === 'offer' && r.pay && r.pay.hold;
-    return `<tr class="${KSEL.has(k) ? 'sel' : ''}${held ? ' held' : ''}${qtyOf(r.no) > 1 ? ' is-multi' : ''}">
+    return `<tr class="${KSEL.has(k) ? 'sel' : ''}${held ? ' held' : ''}${qtyOf(r.no) > 1 ? ' is-multi' : ''}${noteOf(r.no) ? ' has-note' : ''}">
       <td class="cb">${can ? `<input type="checkbox" data-ksel="${esc(k)}" ${KSEL.has(k) ? 'checked' : ''}>` : ''}</td>
       <td class="no"><div class="no-wrap">${r.no ? eyeBtn(r.no) : ''}<span>#${esc(r.no || '?')}</span>${r.no ? multiBadge(r.no) : ''}</div></td><td>${fmtD(KTAB === 'cod' ? r.tarih : r.createdAt)}</td>
-      <td>${esc(KTAB === 'cod' ? r.ad : r.name) || '—'}</td>
+      <td>${esc(KTAB === 'cod' ? r.ad : r.name) || '—'}${r.no ? noteHtml(r.no) : ''}</td>
       <td class="addr">${esc(r.adres || r.address || '')}${place ? `<div class="sub">${esc(place)}</div>` : ''}</td>
       ${ship}<td>${st}</td><td><div class="act">${act}</div></td></tr>`;
   }).join('') || `<tr><td colspan="8" class="muted">${KFILTER === 'todo' ? 'Yazdırılacak kargo fişi yok.' : 'Gösterilecek gönderi yok.'}</td></tr>`;
@@ -1051,6 +1059,8 @@ async function openOrder(no) {
   parts.push(`<div class="od-chips">${row.financial ? payCell(row) : ''}${ps ? `<div>${ps.html}</div>` : ''}${d.addrError ? '<span class="chip err">Adres hatası</span>' : ''}</div>`);
   if (d.hold) parts.push(`<div class="od-warn">⚠ ${esc(d.hold)} — baskı ve kargo bekletiliyor.</div>`);
   const nq = (row.items || []).reduce((a, i) => a + (Number(i.qty) || 1), 0) || d.files.reduce((a, f) => a + (Number(f.qty) || 1), 0);
+  const odNote = row.note || noteOf(no);
+  if (odNote) parts.push(`<div class="od-note"><b>Müşteri notu</b><span>${esc(odNote)}</span></div>`);
   if (nq > 1) parts.push(`<div class="od-multi"><b>${nq} ürünlü sipariş</b><span>Hepsini birlikte basıp aynı pakete koyun; tek fişle gönderilir.</span></div>`);
   // gonderim adresi
   const A = d.address;

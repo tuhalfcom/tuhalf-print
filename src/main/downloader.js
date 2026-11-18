@@ -223,7 +223,7 @@ const DETAIL_FIELDS = (pii) => `
   id name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus paymentGatewayNames
   totalPriceSet { shopMoney { amount currencyCode } }
   shippingLine { title }
-  ${pii ? 'shippingAddress { name city province } billingAddress { name } customer { displayName }' : ''}
+  ${pii ? 'note customAttributes { key value } shippingAddress { name city province } billingAddress { name } customer { displayName }' : ''}
   lineItems(first: 50) { nodes { title quantity variantTitle } }`;
 const detailQuery = (pii) => `query($cursor: String, $search: String) {
   orders(first: 100, after: $cursor, query: $search, sortKey: CREATED_AT, reverse: true) {
@@ -231,6 +231,18 @@ const detailQuery = (pii) => `query($cursor: String, $search: String) {
     nodes { ${DETAIL_FIELDS(pii)} }
   }
 }`;
+
+// Musterinin siparise biraktigi not + sepet ozellikleri (hediye paketi vb.). "_" ile baslayanlar sistem alanidir.
+function orderNote(o) {
+  const parts = [];
+  if (o.note && String(o.note).trim()) parts.push(String(o.note).trim());
+  for (const a of o.customAttributes || []) {
+    if (!a || !a.key || String(a.key).startsWith('_') || a.value == null || String(a.value).trim() === '') continue;
+    if (/^(utm_|fbclid|gclid|ref|landing|session|cart_?token|tracking)/i.test(a.key)) continue;
+    parts.push(`${a.key}: ${String(a.value).trim()}`);
+  }
+  return parts.join('\n').slice(0, 1000);
+}
 
 // Shopify'dan son N gunun siparislerini ozet bilgileriyle getirir.
 // Musteri adi/sehir "korunan musteri verisi" izni ister; izin yoksa bu alanlar olmadan tekrar dener.
@@ -268,6 +280,7 @@ async function fetchOrderDetails(cfg, days = 14) {
         gateways: o.paymentGatewayNames || [], shipping: (o.shippingLine && o.shippingLine.title) || '',
         total: o.totalPriceSet ? Number(o.totalPriceSet.shopMoney.amount) : null, currency: o.totalPriceSet ? o.totalPriceSet.shopMoney.currencyCode : '',
         items: (o.lineItems.nodes || []).map((l) => ({ title: l.title, variant: l.variantTitle || '', qty: l.quantity })),
+        note: orderNote(o),
       };
     }),
   };
@@ -288,4 +301,4 @@ async function fetchOrderAddresses(cfg, gids) {
   return out;
 }
 
-module.exports = { runDownload, shopHost, fetchOrderDetails, fetchPayStatuses, holdReason, payInfo, fetchOrderAddresses };
+module.exports = { orderNote, runDownload, shopHost, fetchOrderDetails, fetchPayStatuses, holdReason, payInfo, fetchOrderAddresses };

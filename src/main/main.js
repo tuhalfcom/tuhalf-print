@@ -104,6 +104,21 @@ function notify(title, body) { try { if (Notification.isSupported()) new Notific
 
 // ---------------- Odeme durumu (havale bekleyen / iptal siparisler basilmaz) ----------------
 function holdOf(no) { return no ? holdReason((state.data.pay || {})[no]) : null; }
+// Yeni gelen musteri notlarini bir kez bildir (personel atlamasin)
+function noteAlerts(list) {
+  const seen = state.data.notesSeen || (state.data.notesSeen = {});
+  let changed = false;
+  for (const o of list || []) {
+    if (!o.note || seen[o.no] || o.cancelled) continue;
+    seen[o.no] = Date.now(); changed = true;
+    const first = !state.data.notesInit;
+    if (!first) { log('warn', `#${o.no} müşteri notu: ${o.note.replace(/\s+/g, ' ').slice(0, 140)}`); notify(`#${o.no} siparişinde müşteri notu var`, o.note.slice(0, 180)); }
+  }
+  if (!state.data.notesInit) { state.data.notesInit = Date.now(); changed = true; }
+  const cut = Date.now() - 30 * 864e5;
+  for (const k of Object.keys(seen)) if (seen[k] < cut) delete seen[k];
+  if (changed) state.save();
+}
 function updatePay(list) {
   if (!list || !list.length) return;
   const pay = { ...(state.data.pay || {}) };
@@ -532,7 +547,7 @@ ipcMain.handle('orders-detail', async (_e, force, daysArg) => {
     } catch (e) { error = e.message; }
   } else error = 'Shopify bilgileri girilmemiş; sadece indirilen dosyalar gösteriliyor.';
   const rows = new Map();
-  if (remote) updatePay(remote);
+  if (remote) { updatePay(remote); noteAlerts(remote); }
   for (const o of remote || []) rows.set(o.no, { ...o, hold: holdReason(o), local: local.get(o.no) || null });
   for (const [no, l] of local) if (!rows.has(no)) rows.set(no, { no, hold: holdOf(no), name: '', createdAt: null, financial: '', fulfillment: '', gateways: [], shipping: '', total: null, currency: '', items: [], local: l, onlyLocal: true });
   const list = Array.from(rows.values()).sort((a, b) => b.no - a.no);
@@ -548,7 +563,7 @@ async function todayStats(force) {
     let orders;
     if (detailCache && Date.now() - detailCache.at < 3 * 60000 && detailCache.days >= 2) orders = detailCache.data.orders;
     else {
-      if (force || !statsCache || Date.now() - statsCache.at > 3 * 60000) statsCache = { at: Date.now(), data: await fetchOrderDetails(c, 2) };
+      if (force || !statsCache || Date.now() - statsCache.at > 3 * 60000) statsCache = { at: Date.now(), data: await fetchOrderDetails(c, 2) }; noteAlerts(statsCache.data.orders);
       orders = statsCache.data.orders;
     }
     const d0 = new Date(); d0.setHours(0, 0, 0, 0);
@@ -616,7 +631,7 @@ async function phoneSnapshot() {
     const kapida = (o.gateways || []).concat(o.shipping || '').some((x) => /cash on delivery|\bcod\b|kap[ıi]da/i.test(x));
     const baski = holdReason(o) ? 'tutuldu' : !l ? 'dosyayok' : l.all ? 'basildi' : l.arranged ? 'dizildi' : 'bekliyor';
     const dosyalar = l ? l.files.slice(0, 8).map((f) => ({ olcu: f.olcu, renk: f.renk, adet: f.adet, path: f.path })) : [];
-    return { dosyalar, no: o.no, ad: o.name, sehir: o.city, tarih: Date.parse(o.createdAt) || null, tutar: o.total, odeme: o.financial === 'PAID' ? 'Ödendi' : (o.gateways || []).join(', ') || o.financial, odendi: o.financial === 'PAID', kapida, urun: (o.items || []).reduce((a, x) => a + (Number(x.qty) || 1), 0), baski, iptal: !!o.cancelled };
+    return { not: o.note || '', dosyalar, no: o.no, ad: o.name, sehir: o.city, tarih: Date.parse(o.createdAt) || null, tutar: o.total, odeme: o.financial === 'PAID' ? 'Ödendi' : (o.gateways || []).join(', ') || o.financial, odendi: o.financial === 'PAID', kapida, urun: (o.items || []).reduce((a, x) => a + (Number(x.qty) || 1), 0), baski, iptal: !!o.cancelled };
   });
   out.olaylar = logs.slice(-12).reverse().map((e) => ({ t: e.t, seviye: e.level, mesaj: e.msg }));
   return out;
