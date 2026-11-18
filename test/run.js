@@ -306,7 +306,7 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.deepStrictEqual(r4.files.sort(), ['2267-15x21-Cercevesiz-Urun-2.png', '2267-21x30-Beyaz-Urun-1-2Adet.png']));
   await t('musteri notu: not + sepet ozellikleri, sistem alanlari haric', () => {
     const { orderNote } = require('../src/main/downloader');
-    assert.strictEqual(orderNote({ note: ' Hediye paketi olsun ', customAttributes: [{ key: '_teeinblue', value: 'x' }, { key: 'Hediye notu', value: 'İyi ki doğdun' }, { key: 'utm_source', value: 'ig' }, { key: 'Bos', value: ' ' }] }), 'Hediye paketi olsun\nHediye notu: İyi ki doğdun');
+    assert.strictEqual(orderNote({ note: ' Hediye paketi olsun ', customAttributes: [{ key: '_teeinblue', value: 'x' }, { key: 'Hediye notu', value: 'İyi ki doğdun' }, { key: 'utm_source', value: 'ig' }, { key: 'Bos', value: ' ' }] }), 'Hediye paketi olsun');
     assert.strictEqual(orderNote({ note: null, customAttributes: [] }), '');
     assert.strictEqual(orderNote({ note: 'https://app.teeinblue.com/preview/abc\nhttps://cdn.shopify.com/x.png', customAttributes: [{ key: 'Personalization', value: 'https://teeinblue.com/p/1' }, { key: 'Design link', value: 'abc' }] }), '');
   });

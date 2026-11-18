@@ -223,7 +223,7 @@ const DETAIL_FIELDS = (pii) => `
   id name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus paymentGatewayNames
   totalPriceSet { shopMoney { amount currencyCode } }
   shippingLine { title }
-  ${pii ? 'note customAttributes { key value } shippingAddress { name city province } billingAddress { name } customer { displayName }' : ''}
+  ${pii ? 'note shippingAddress { name city province } billingAddress { name } customer { displayName }' : ''}
   lineItems(first: 50) { nodes { title quantity variantTitle } }`;
 const detailQuery = (pii) => `query($cursor: String, $search: String) {
   orders(first: 100, after: $cursor, query: $search, sortKey: CREATED_AT, reverse: true) {
@@ -239,13 +239,6 @@ function orderNote(o) {
   const parts = [];
   const note = String(o.note || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !isLink(l) && !/^[-_=*•\s]+$/.test(l)).join('\n');
   if (note) parts.push(note);
-  // Sepet ozelliklerinden sadece musterinin yazdigi hediye/not alanlari
-  for (const a of o.customAttributes || []) {
-    const k = String((a && a.key) || ''), v = String((a && a.value) || '').trim();
-    if (!k || k.startsWith('_') || !v || isLink(v) || isLink(k)) continue;
-    if (!/hediye|gift|not|note|mesaj|message|paket|wrap|istek|a[cç][iı]klama/i.test(k)) continue;
-    parts.push(`${k}: ${v}`);
-  }
   return parts.join('\n').slice(0, 1000);
 }
 
