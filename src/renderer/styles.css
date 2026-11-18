@@ -748,3 +748,8 @@ tr.is-multi td:first-child { box-shadow: inset 3px 0 0 #ffd23f; }
 .od-note { padding: 12px 14px; border-radius: 10px; background: rgba(77, 171, 247, .12); border: 1px solid rgba(77, 171, 247, .6); }
 .od-note b { display: block; color: #74c0fc; margin-bottom: 4px; }
 .od-note span { white-space: pre-line; user-select: text; }
+
+/* Siparisler: daha dar arama + Notlu filtresi */
+.ord-search { flex: 0 1 260px !important; width: 260px !important; min-width: 180px; }
+.f-note .cnt:not(:empty) { margin-left: 6px; padding: 0 6px; border-radius: 9px; background: rgba(77, 171, 247, .2); color: #74c0fc; font-size: 11.5px; font-weight: 700; line-height: 18px; display: inline-block; }
+.f-note.active .cnt:not(:empty) { background: #1c7ed6; color: #fff; }

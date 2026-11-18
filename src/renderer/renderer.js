@@ -437,7 +437,7 @@ function renderOrdersPage() {
   const money = (o) => (o.total == null ? '—' : o.total.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (o.currency === 'TRY' ? ' ₺' : ' ' + o.currency));
   const rows = ORD.rows.filter((o) => {
     const ps = printState(o).key;
-    if (ORD_FILTER !== 'all' && ps !== ORD_FILTER) return false;
+    if (ORD_FILTER === 'note') { if (!o.note) return false; } else if (ORD_FILTER !== 'all' && ps !== ORD_FILTER) return false;
     if (!inOrdRange(o.createdAt)) return false;
     if (ORD_PAY !== 'all' && payCat(o) !== ORD_PAY) return false;
     if (!q) return true;
@@ -463,6 +463,8 @@ function renderOrdersPage() {
   }).join('') || '<tr><td colspan="8" class="muted">Gösterilecek sipariş yok.</td></tr>';
   const inR = ORD.rows.filter((o) => inOrdRange(o.createdAt));
   const cnt = (k) => inR.filter((o) => printState(o).key === k).length;
+  const nN = inR.filter((o) => o.note && !o.cancelled).length;
+  $('#ordNoteCnt').textContent = nN ? String(nN) : '';
   $('#ordInfo').textContent = `${inR.length} sipariş · ${cnt('unprinted')} basılmadı · ${cnt('hold')} ödeme bekliyor` + (ORD.fetchedAt ? ` · Shopify ${fmtTime(ORD.fetchedAt)}` : '');
 }
 async function loadOrdersPage(force, markSeen) {

@@ -93,9 +93,9 @@
         </header>
       <div id="ordTableWrap">
         <div class="ord-toolbar">
-          <input id="ordSearch" type="search" placeholder="Sipariş no, müşteri, şehir ara…" />
+          <input id="ordSearch" class="ord-search" type="search" placeholder="Sipariş no, müşteri, şehir ara…" />
           <div class="seg" id="ordFilter">
-            <button data-f="all" class="active">Tümü</button><button data-f="unprinted">Basılmadı</button><button data-f="printed">Basıldı</button><button data-f="hold">Ödeme bekleniyor</button><button data-f="nofile">Dosyası yok</button>
+            <button data-f="all" class="active">Tümü</button><button data-f="unprinted">Basılmadı</button><button data-f="printed">Basıldı</button><button data-f="hold">Ödeme bekleniyor</button><button data-f="nofile">Dosyası yok</button><button data-f="note" class="f-note">Notlu<span class="cnt" id="ordNoteCnt"></span></button>
           </div>
           <select id="ordRange" class="days" title="Tarih aralığı"><option value="today">Bugün</option><option value="yesterday">Dün</option><option value="3">Son 3 gün</option><option value="7">Son 7 gün</option><option value="14" selected>Son 14 gün</option><option value="30">Son 30 gün</option><option value="60">Son 60 gün</option></select>
           <select id="ordPay" class="days" title="Ödeme yöntemi"><option value="all">Tüm ödemeler</option><option value="cod">Kapıda ödeme</option><option value="card">Kredi kartı (PayTR)</option><option value="havale">Havale / EFT</option><option value="other">Diğer</option></select>
