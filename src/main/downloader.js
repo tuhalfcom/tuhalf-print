@@ -273,6 +273,7 @@ async function fetchOrderDetails(cfg, days = 14) {
       const name = (o.shippingAddress && o.shippingAddress.name) || (o.billingAddress && o.billingAddress.name) || (o.customer && o.customer.displayName) || '';
       return {
         gid: o.id, no, name, city: (o.shippingAddress && (o.shippingAddress.city || o.shippingAddress.province)) || '',
+        il: (o.shippingAddress && o.shippingAddress.province) || '', ilce: (o.shippingAddress && o.shippingAddress.city) || '',
         createdAt: o.createdAt, cancelled: !!o.cancelledAt,
         financial: o.displayFinancialStatus || '', fulfillment: o.displayFulfillmentStatus || '',
         gateways: o.paymentGatewayNames || [], shipping: (o.shippingLine && o.shippingLine.title) || '',

@@ -631,7 +631,7 @@ async function phoneSnapshot() {
     const kapida = (o.gateways || []).concat(o.shipping || '').some((x) => /cash on delivery|\bcod\b|kap[ıi]da/i.test(x));
     const baski = holdReason(o) ? 'tutuldu' : !l ? 'dosyayok' : l.all ? 'basildi' : l.arranged ? 'dizildi' : 'bekliyor';
     const dosyalar = l ? l.files.slice(0, 8).map((f) => ({ olcu: f.olcu, renk: f.renk, adet: f.adet, path: f.path })) : [];
-    return { not: o.note || '', dosyalar, no: o.no, ad: o.name, sehir: o.city, tarih: Date.parse(o.createdAt) || null, tutar: o.total, odeme: o.financial === 'PAID' ? 'Ödendi' : (o.gateways || []).join(', ') || o.financial, odendi: o.financial === 'PAID', kapida, urun: (o.items || []).reduce((a, x) => a + (Number(x.qty) || 1), 0), baski, iptal: !!o.cancelled };
+    return { not: o.note || '', il: o.il || '', ilce: o.ilce || '', yontem: (o.gateways || []).join(', '), urunler: (o.items || []).slice(0, 10).map((x) => ({ ad: [x.title, x.variant].filter(Boolean).join(' / '), adet: x.qty })), dosyalar, no: o.no, ad: o.name, sehir: o.city, tarih: Date.parse(o.createdAt) || null, tutar: o.total, odeme: o.financial === 'PAID' ? 'Ödendi' : (o.gateways || []).join(', ') || o.financial, odendi: o.financial === 'PAID', kapida, urun: (o.items || []).reduce((a, x) => a + (Number(x.qty) || 1), 0), baski, iptal: !!o.cancelled };
   });
   out.olaylar = logs.slice(-12).reverse().map((e) => ({ t: e.t, seviye: e.level, mesaj: e.msg }));
   return out;
