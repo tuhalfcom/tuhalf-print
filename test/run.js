@@ -310,6 +310,20 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.strictEqual(orderNote({ note: null, customAttributes: [] }), '');
     assert.strictEqual(orderNote({ note: 'https://app.teeinblue.com/preview/abc\nhttps://cdn.shopify.com/x.png', customAttributes: [{ key: 'Personalization', value: 'https://teeinblue.com/p/1' }, { key: 'Design link', value: 'abc' }] }), '');
   });
+  await t('duzenlenen siparis: kaldirilan urun basilmaz, tasarim yeni olcuye tasinir', () => {
+    const { printItems } = require('../src/main/downloader');
+    const L = (k) => [{ key: '_customization_id', value: 'c' }, { key: '_tib_design_link_1', value: 'https://x/' + k + '.png' }];
+    const r = printItems([
+      { title: 'Forma', variantTitle: 'Çerçeveli Poster / Siyah / 30x42 cm', quantity: 1, currentQuantity: 0, customAttributes: L('a') },
+      { title: 'Forma', variantTitle: 'Çerçeveli Poster / Siyah / 50x70 cm', quantity: 1, currentQuantity: 1, customAttributes: [] },
+      { title: 'Baska', variantTitle: 'Çerçeveli Poster / Beyaz / 30x42 cm', quantity: 2, currentQuantity: 1, customAttributes: L('b') },
+      { title: 'Kaldirildi', variantTitle: 'Çerçeveli Poster / Beyaz / 30x42 cm', quantity: 1, currentQuantity: 0, customAttributes: L('c') },
+    ], ['Siyah', 'Beyaz']);
+    assert.strictEqual(r.items.length, 2);
+    assert.strictEqual(r.items[0].url, 'https://x/a.png'); assert.strictEqual(r.items[0].size, '50x70'); assert.strictEqual(r.items[0].moved, true);
+    assert.strictEqual(r.items[1].qty, 1);
+    assert.strictEqual(r.missing, false);
+  });
   srv.close();
   fs.rmSync(root, { recursive: true, force: true });
   console.log(`\n${pass} test gecti.`);

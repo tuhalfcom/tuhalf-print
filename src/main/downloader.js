@@ -10,8 +10,8 @@ const QUERY = `query($cursor: String, $search: String) {
   orders(first: 50, after: $cursor, query: $search, sortKey: CREATED_AT) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id name createdAt cancelledAt displayFinancialStatus paymentGatewayNames shippingLine { title }
-      lineItems(first: 50) { nodes { id title quantity variantTitle customAttributes { key value } } }
+      id name createdAt cancelledAt edited displayFinancialStatus paymentGatewayNames shippingLine { title }
+      lineItems(first: 50) { nodes { id title quantity currentQuantity variantTitle customAttributes { key value } } }
     }
   }
 }`;
@@ -82,6 +82,32 @@ async function downloadFile(url, dir, baseName) {
   throw lastErr;
 }
 
+// Siparis duzenlendiyse (Shopify > Siparisi duzenle) kaldirilan urunler currentQuantity=0 olarak listede kalir.
+// Sadece guncel urunler basilir. Olcu/renk degisikligi icin eklenen yeni urunde Teeinblue linki olmaz;
+// tasarim, ayni urunun kaldirilan satirindan alinir.
+const qtyNow = (li) => (li.currentQuantity == null ? li.quantity : li.currentQuantity);
+function printItems(lineItems, colorWords) {
+  const nodes = lineItems || [];
+  const linksOf = (li) => (li.customAttributes || []).filter((a) => /^_tib_design_link_\d+$/.test(a.key) && a.value)
+    .sort((a, b) => parseInt(a.key.replace(/\D/g, ''), 10) - parseInt(b.key.replace(/\D/g, ''), 10));
+  const isCustom = (li) => (li.customAttributes || []).some((a) => a.key === '_customization_id' && a.value);
+  const pool = nodes.filter((li) => qtyNow(li) <= 0 && linksOf(li).length);
+  const items = []; let missing = false;
+  for (const li of nodes) {
+    const q = qtyNow(li);
+    if (q <= 0) continue;
+    let links = linksOf(li), moved = false;
+    if (!links.length && !isCustom(li)) {
+      const i = pool.findIndex((r) => r.title === li.title);
+      if (i >= 0) { links = linksOf(pool[i]); pool.splice(i, 1); moved = true; }
+    }
+    if (!links.length) { if (isCustom(li)) missing = true; continue; }
+    const sc = sizeAndColor(li.variantTitle, colorWords);
+    for (const l of links) items.push({ url: l.value, size: sc.size, color: sc.color, qty: q, title: li.title, moved });
+  }
+  return { items, missing };
+}
+
 // Ayni adli dosya (uzanti haric) son gun klasorlerinde ya da _Dizildi altinda var mi
 function existsAny(root, baseName) {
   let days = [];
@@ -126,7 +152,11 @@ async function runDownload(cfg, done, log) {
     if (o.cancelledAt) continue;
     if (redo) { if (orderNo < redo) continue; if (cfg.redownloadOnly && orderNo !== Number(cfg.redownloadOnly)) continue; }
     else {
-      if (done.has(o.id)) continue;
+      if (done.has(o.id)) {
+        // Indirildikten sonra Shopify'da duzenlendiyse (olcu/renk/urun degisikligi) dosyalari guncelle
+        if (o.edited && cfg.downloadDir) await syncEdited(cfg, o, orderNo, result, log);
+        continue;
+      }
       if (cfg.ignoreBefore && Date.parse(o.createdAt) < cfg.ignoreBefore) continue;   // resetten onceki siparis
       if (cfg.firstOrderNo > 0 && orderNo < cfg.firstOrderNo) continue;
     }
@@ -138,17 +168,7 @@ async function runDownload(cfg, done, log) {
       continue;
     }
 
-    const items = [];
-    let missing = false;
-    for (const li of o.lineItems.nodes) {
-      const attrs = li.customAttributes || [];
-      const links = attrs.filter((a) => /^_tib_design_link_\d+$/.test(a.key) && a.value)
-        .sort((a, b) => parseInt(a.key.replace(/\D/g, ''), 10) - parseInt(b.key.replace(/\D/g, ''), 10));
-      const custom = attrs.some((a) => a.key === '_customization_id' && a.value);
-      if (!links.length) { if (custom) missing = true; continue; }
-      const sc = sizeAndColor(li.variantTitle, cfg.colorWords);
-      for (const l of links) items.push({ url: l.value, size: sc.size, color: sc.color, qty: li.quantity, title: li.title });
-    }
+    const { items, missing } = printItems(o.lineItems.nodes, cfg.colorWords);
     if (missing) {
       result.pending.push(`#${orderNo} (baskı linki henüz yok)`);
       result.retryInMs = Math.min(result.retryInMs || Infinity, 3 * 60000);
@@ -179,6 +199,42 @@ async function runDownload(cfg, done, log) {
   }
   result.folderName = [...usedFolders].join(', ');
   return result;
+}
+
+// Duzenlenen siparis: beklenen dosya adlari yerelde yoksa eski dosyalar baski sirasindan cikarilir (_Duzenlendi) ve yenileri indirilir
+async function syncEdited(cfg, o, orderNo, result, log) {
+  const { items } = printItems(o.lineItems.nodes, cfg.colorWords);
+  if (!items.length) return;
+  const names = items.map((it, i) => buildName(orderNo, it, i + 1, items.length));
+  if (Date.now() - Date.parse(o.createdAt) > 4 * 864e5) return;
+  const outDir = path.join(cfg.downloadDir, orderDayFolderName(o.createdAt));
+  // Siparisin klasoru/dosyalari yerelde yoksa (temizlenmis) dokunma
+  const has = (d) => { try { return fs.readdirSync(d).some((f) => f.startsWith(orderNo + '-')); } catch { return false; } };
+  if (!has(outDir) && !has(path.join(outDir, '_Dizildi'))) return;
+  if (names.every((n) => existsAny(cfg.downloadDir, n))) return;
+  const want = new Set(names);
+  // Siradaki (henuz dizilmemis) eski dosyalari kenara al
+  let moved = 0, printedOld = false;
+  try {
+    for (const f of fs.readdirSync(outDir)) {
+      const stem = f.slice(0, f.length - path.extname(f).length);
+      if (!f.startsWith(orderNo + '-') || want.has(stem)) continue;
+      if (!fs.statSync(path.join(outDir, f)).isFile()) continue;
+      const dst = path.join(outDir, '_Duzenlendi'); fs.mkdirSync(dst, { recursive: true });
+      fs.renameSync(path.join(outDir, f), path.join(dst, f)); moved++;
+    }
+    printedOld = fs.readdirSync(path.join(outDir, '_Dizildi')).some((f) => f.startsWith(orderNo + '-') && !want.has(f.slice(0, f.length - path.extname(f).length)));
+  } catch { /* */ }
+  let i = 0;
+  for (const it of items) {
+    const bn = names[i++];
+    if (existsAny(cfg.downloadDir, bn)) continue;
+    try {
+      const file = await downloadFile(it.url, outDir, bn);
+      result.files.push(file); result.folder = outDir;
+    } catch (e) { result.errors.push(`#${orderNo}: ${e.message}`); return; }
+  }
+  log('warn', `#${orderNo} Shopify'da düzenlenmiş; baskı dosyası güncellendi (${items.map((x) => [x.size, x.color].filter(Boolean).join(' ')).join(', ')}).${moved ? ' Eski dosya baskı sırasından çıkarıldı.' : ''}${printedOld ? ' DİKKAT: eski ölçü sayfaya dizilmişti, basılmadıysa sayfayı kontrol edin.' : ''}`);
 }
 
 // ---------- Odeme durumu / baski bekletme ----------
@@ -224,7 +280,7 @@ const DETAIL_FIELDS = (pii) => `
   totalPriceSet { shopMoney { amount currencyCode } }
   shippingLine { title }
   ${pii ? 'note shippingAddress { name city province } billingAddress { name } customer { displayName }' : ''}
-  lineItems(first: 50) { nodes { title quantity variantTitle } }`;
+  lineItems(first: 50) { nodes { title quantity currentQuantity variantTitle } }`;
 const detailQuery = (pii) => `query($cursor: String, $search: String) {
   orders(first: 100, after: $cursor, query: $search, sortKey: CREATED_AT, reverse: true) {
     pageInfo { hasNextPage endCursor }
@@ -278,7 +334,7 @@ async function fetchOrderDetails(cfg, days = 14) {
         financial: o.displayFinancialStatus || '', fulfillment: o.displayFulfillmentStatus || '',
         gateways: o.paymentGatewayNames || [], shipping: (o.shippingLine && o.shippingLine.title) || '',
         total: o.totalPriceSet ? Number(o.totalPriceSet.shopMoney.amount) : null, currency: o.totalPriceSet ? o.totalPriceSet.shopMoney.currencyCode : '',
-        items: (o.lineItems.nodes || []).map((l) => ({ title: l.title, variant: l.variantTitle || '', qty: l.quantity })),
+        items: (o.lineItems.nodes || []).filter((l) => qtyNow(l) > 0).map((l) => ({ title: l.title, variant: l.variantTitle || '', qty: qtyNow(l) })),
         note: orderNote(o),
       };
     }),
@@ -300,4 +356,4 @@ async function fetchOrderAddresses(cfg, gids) {
   return out;
 }
 
-module.exports = { orderNote, runDownload, shopHost, fetchOrderDetails, fetchPayStatuses, holdReason, payInfo, fetchOrderAddresses };
+module.exports = { printItems, orderNote, runDownload, shopHost, fetchOrderDetails, fetchPayStatuses, holdReason, payInfo, fetchOrderAddresses };
