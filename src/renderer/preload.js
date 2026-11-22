@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   openUrl: (u) => ipcRenderer.invoke('open-url', u),
   settingsExport: () => ipcRenderer.invoke('settings-export'),
   phoneLink: () => ipcRenderer.invoke('phone-link'),
+  codAddrOk: (gid) => ipcRenderer.invoke('cod-addr-ok', gid),
   phoneEnable: (on) => ipcRenderer.invoke('phone-enable', on),
   settingsImport: () => ipcRenderer.invoke('settings-import'),
   openInPhotoshop: (p) => ipcRenderer.invoke('open-in-ps', p),

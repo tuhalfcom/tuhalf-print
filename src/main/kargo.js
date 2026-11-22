@@ -158,6 +158,13 @@ async function codLabels(cfg, ids, fetchFn = fetch) {
   return getJson(`${codBase(cfg.codUrl)}/api/etiket?ids=${encodeURIComponent(ids.join(','))}`, { Authorization: 'Bearer ' + cfg.codKey }, fetchFn);
 }
 
+// Personel adresi Shopify'da duzelttigini onaylar: siparisteki "adres-kontrol" etiketi kaldirilir
+async function codAddressOk(cfg, gid, fetchFn = fetch) {
+  const r = await fetchFn(`${codBase(cfg.codUrl)}/api/adres-onay`, { method: 'POST', headers: { Authorization: 'Bearer ' + cfg.codKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: gid }) });
+  if (!r.ok) throw new Error(r.status === 404 ? 'Etiket sunucusu güncel değil' : `Sunucu yanıtı: HTTP ${r.status}`);
+  return r.json();
+}
+
 // Etiket sunucusu uzerinden siparis adresleri (Tuhalf Print'in Shopify izni yetmezse)
 async function codAddresses(cfg, gids, fetchFn = fetch) {
   if (!gids.length || !cfg.codUrl || !cfg.codKey) return {};
@@ -295,4 +302,4 @@ async function updateGeliverAddress(token, shipmentId, address, fetchFn = fetch)
   throw new Error('Geliver adresi güncellemedi (' + errs.join(' · ') + '). Adresi Geliver panelinde gönderinin içinden düzeltebilirsiniz.');
 }
 
-module.exports = { geliverBalance, geliverShipment, geliverBuy, preferredOffer, geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };
+module.exports = { geliverBalance, geliverShipment, geliverBuy, preferredOffer, geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, codAddressOk, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };

@@ -786,7 +786,7 @@ async function loadKargo(force) {
       codNos.add(Number(o.no));
       const row = { ...o, printedAt: printed['cod:' + o.no] || null, printedBy: (state.data.labelsBy || {})['cod:' + o.no] || '', admin: shopAdminOrder(o.id) };
       out.cod.push(row);
-      if (o.sorun && !o.etiketli) out.errors.push({ source: 'cod', no: o.no, name: o.ad, address: o.adres, city: [o.sehir, o.il].filter(Boolean).join(' / '), error: o.sorun, link: row.admin, at: o.tarih });
+      if (o.sorun && !o.etiketli) out.errors.push({ source: 'cod', gid: o.id, tagged: !!o.kontrolEtiketi, no: o.no, name: o.ad, address: o.adres, city: [o.sehir, o.il].filter(Boolean).join(' / '), error: o.sorun, link: row.admin, at: o.tarih });
     }
   } else out.codError = c.reason.message;
   // Geliver (kapida odeme siparisleri DHL'e gider, burada gosterilmez)
@@ -868,6 +868,10 @@ function markLabels(keys) {
 }
 
 // Shopify'da duzeltilen adresi Geliver gonderisine aktar
+ipcMain.handle('cod-addr-ok', async (_e, gid) => {
+  try { await K.codAddressOk(config.data.kargo || {}, gid); log('info', 'Adres kontrol işareti kaldırıldı, adres yeniden denetleniyor.'); return { ok: true }; }
+  catch (e) { return { error: e.message }; }
+});
 ipcMain.handle('geliver-sync', async (_e, shipmentId) => {
   const k = config.data.kargo || {};
   try {

@@ -305,10 +305,19 @@ function openDrawer(open) {
 
 // ---------- Olaylar ----------
 document.addEventListener('click', async (ev) => {
-  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],[data-gsync],[data-gbuy],[data-glogin],[data-kgo],.order,.ord-file');
+  const t = ev.target.closest('[data-open],[data-print],[data-show],[data-pick],[data-mark],[data-ps],[data-view],[data-goto],[data-scroll],[data-url],[data-kprint],[data-kunmark],[data-import],[data-prefs],[data-gsync],[data-codok],[data-gbuy],[data-glogin],[data-kgo],.order,.ord-file');
   if (!t) return;
   if (t.dataset.import) return doImport();
   if (t.dataset.kgo) { KTAB = 'geliver'; KFILTER = t.dataset.kgo; KPAGE = 1; for (const x of $('#kargoTabs').children) x.classList.toggle('active', x.dataset.k === 'geliver'); }
+  if (t.dataset.codok) {
+    t.disabled = true; t.textContent = 'Denetleniyor…';
+    const r = await window.api.codAddrOk(t.dataset.codok);
+    if (r.error) { toast(r.error, true); t.disabled = false; t.textContent = 'Düzelttim'; return; }
+    await loadKargo(true);
+    const still = (KG.errors || []).find((x) => x.gid === t.dataset.codok);
+    toast(still ? `Adres hâlâ çözülemedi: ${still.error}` : 'Adres düzeldi; kapıda ödeme fişi yazdırılabilir.', !!still);
+    return;
+  }
   if (t.dataset.gsync) {
     t.disabled = true; t.textContent = 'Aktarılıyor…';
     const r = await window.api.geliverSync(t.dataset.gsync);
@@ -688,6 +697,9 @@ function renderAdres() {
         fix = `<button class="btn primary small" data-gsync="${esc(e.id)}">Geliver'e aktar</button>`;
       } else if (e.shopText) note = `<div class="sub">Shopify'daki adres de aynı: önce Shopify'da düzeltin, sonra Yenile.</div>`;
       else if (e.shopNote) note = `<div class="sub">${esc(e.shopNote)}</div>`;
+    } else if (e.source === 'cod' && e.tagged && e.gid) {
+      note = `<div class="sub">Shopify'da düzelttiyseniz “Düzelttim”e basın; adres yeniden denetlenir.</div>`;
+      fix = `<button class="btn primary small" data-codok="${esc(e.gid)}">Düzelttim</button>`;
     }
     return `<tr>
     <td class="no"><div class="no-wrap">${e.no ? eyeBtn(e.no) : ''}<span>#${esc(e.no || '?')}</span>${e.no ? multiBadge(e.no) : ''}</div></td>
