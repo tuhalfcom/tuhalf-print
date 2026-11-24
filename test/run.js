@@ -324,6 +324,14 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.strictEqual(r.items[1].qty, 1);
     assert.strictEqual(r.missing, false);
   });
+  await t('geliver telefon bicimi', () => {
+    const K = require('../src/main/kargo');
+    assert.strictEqual(K.geliverPhone('0545 600 60 14'), '+905456006014');
+    assert.strictEqual(K.geliverPhone('+90 (545) 600-6014'), '+905456006014');
+    assert.strictEqual(K.geliverPhone('5456006014'), '+905456006014');
+    assert.strictEqual(K.geliverPhone('', '905456006014'), '+905456006014');
+    assert.strictEqual(K.geliverPhone('0312 111 22 33'), '');
+  });
   srv.close();
   fs.rmSync(root, { recursive: true, force: true });
   console.log(`\n${pass} test gecti.`);

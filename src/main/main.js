@@ -798,7 +798,7 @@ async function loadKargo(force) {
       const row = { ...s, kind: K.geliverKind(s), printedAt: printed['geliver:' + s.id] || null, printedBy: (state.data.labelsBy || {})['geliver:' + s.id] || '', admin: shopAdminOrder(s.gid) };
       out.geliver.push(row);
       const err = K.geliverAddressError(s);
-      if (err && row.kind !== 'done') out.errors.push({ source: 'geliver', id: s.id, gid: s.gid, no: s.no, name: s.name, address: s.address, city: [s.district, s.city].filter(Boolean).join(' / '), error: err, link: row.admin, geliver: true, at: s.createdAt, row: s });
+      if (err && row.kind !== 'done') out.errors.push({ source: 'geliver', id: s.id, gid: s.gid, no: s.no, name: s.name, address: s.address, city: [s.district, s.city].filter(Boolean).join(' / '), error: err, phone: s.phone || '', link: row.admin, geliver: true, at: s.createdAt, row: s });
     }
   } else out.geliverError = g.reason.message;
   // Teklif bekleyen Geliver gonderileri: odeme durumu (havalesi gelmemis siparise kargo alinmasin)
@@ -878,7 +878,7 @@ ipcMain.handle('geliver-sync', async (_e, shipmentId) => {
     const data = await loadKargo(false);
     const e = data.errors.find((x) => x.id === shipmentId);
     if (!e || !e.shopAddr) return { error: 'Shopify adresi bulunamadı; Yenile deyip tekrar deneyin.' };
-    const r = await K.toGeliverAddress(k.geliverToken, e.shopAddr);
+    const r = await K.toGeliverAddress(k.geliverToken, e.shopAddr, undefined, (e.row && e.row.phone) || e.phone || '');
     if (r.error) return { error: r.error };
     const A = r.address;
     const ok = await ask({

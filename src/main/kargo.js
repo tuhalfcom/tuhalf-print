@@ -227,7 +227,18 @@ function findDistrict(ds, ilAdi, a) {
   }
   return null;
 }
-async function toGeliverAddress(token, a, fetchFn = fetch) {
+// Geliver telefonu +905XXXXXXXXX biciminde ister (05.., 5.., 90.., bosluk/tire olabilir)
+function geliverPhone(...list) {
+  for (const p of list) {
+    let d = String(p || '').replace(/\D/g, '');
+    if (d.startsWith('0090')) d = d.slice(4); else if (d.startsWith('90') && d.length === 12) d = d.slice(2);
+    if (d.startsWith('0')) d = d.slice(1);
+    if (/^5\d{9}$/.test(d)) return '+90' + d;
+  }
+  return '';
+}
+
+async function toGeliverAddress(token, a, fetchFn = fetch, fallbackPhone = '') {
   if (!a) return { error: 'Shopify adresi okunamadı' };
   const cands = cityCandidates(a);
   if (!cands.length) return { error: 'Shopify adresinde il bulunamadı — Shopify\'da “İl” alanını seçin' };
@@ -246,12 +257,13 @@ async function toGeliverAddress(token, a, fetchFn = fetch) {
   }
   const iller = cands.map((c) => IL[Number(c) - 1]).join(' / ');
   if (!d) return { error: `Adreste ilçe bulunamadı (${iller}). Shopify'da adres satırına ya da “Şehir” alanına ilçeyi yazın, sonra Yenile.` };
+  if (!geliverPhone(a.phone, fallbackPhone)) return { error: `Telefon numarası geçersiz (“${a.phone || 'boş'}”). Shopify'da teslimat adresindeki telefonu 05XX XXX XX XX biçiminde düzeltin, sonra Yenile.` };
   const ilAdi = IL[Number(cityCode) - 1];
   const sIl = shopifyIlOf(a);
   const name = a.name || [a.firstName, a.lastName].filter(Boolean).join(' ');
   return {
     address: {
-      name, phone: a.phone || '', address1: a.address1 || '', address2: a.address2 || '',
+      name, phone: geliverPhone(a.phone, fallbackPhone), address1: a.address1 || '', address2: a.address2 || '',
       zip: /^\d{5}$/.test(String(a.zip || '').trim()) ? String(a.zip).trim() : '',
       countryCode: 'TR', cityCode, cityName: ilAdi, districtID: d.districtID, districtName: d.name, isRecipientAddress: true,
     },
@@ -302,4 +314,4 @@ async function updateGeliverAddress(token, shipmentId, address, fetchFn = fetch)
   throw new Error('Geliver adresi güncellemedi (' + errs.join(' · ') + '). Adresi Geliver panelinde gönderinin içinden düzeltebilirsiniz.');
 }
 
-module.exports = { geliverBalance, geliverShipment, geliverBuy, preferredOffer, geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, codAddressOk, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };
+module.exports = { geliverPhone, geliverBalance, geliverShipment, geliverBuy, preferredOffer, geliverShipments, geliverKind, geliverAddressError, mapShipment, codOrders, codLabels, codAddressOk, STATUS_TR, toGeliverAddress, updateGeliverAddress, addressChanged, cityCodeOf, cityCandidates, norm, codAddresses };
