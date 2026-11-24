@@ -123,7 +123,7 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     const list = { '34': ['Adalar', 'Fatih', 'Eyüpsultan', 'Beyoğlu'], '35': ['Urla', 'Konak'], '03': ['Merkez', 'Sandıklı', 'Dinar'] }[cc] || [];
     return new Response(JSON.stringify({ result: true, data: list.map((n, i) => ({ cityCode: cc, districtID: 1000 + i, name: n })) }), { status: 200 });
   };
-  const A = (x) => K.toGeliverAddress('tok', x, dist);
+  const A = (x) => K.toGeliverAddress('tok', { phone: '05321112233', ...x }, dist);
   await t('Adres duzeltme: Shopify adresi Geliver bicimine (il kodu + ilce kodu)', async () => {
     const r = await A({ name: 'M K', address1: 'Nişanca mahallesi alişan sokak No5 daire7', city: 'Fatih', province: 'İstanbul', provinceCode: 'TR-34', phone: '+905370630447' });
     assert.strictEqual(r.address.cityCode, '34'); assert.strictEqual(r.address.districtID, 1001); assert.strictEqual(r.address.districtName, 'Fatih');
@@ -205,7 +205,7 @@ const t = async (name, fn) => { await fn(); pass++; console.log('  ✓ ' + name)
     assert.ok(!K.addressChanged({ address: 'A sok 1', city: 'İstanbul', district: 'Fatih' }, { address1: 'A sok 1', city: 'Fatih', provinceCode: 'TR-34' }));
   });
   await t('Adres duzeltme: Geliver gonderisine PATCH ile yazilir', async () => {
-    const r = await A({ name: 'M K', address1: 'Nişanca mah.', city: 'Fatih', provinceCode: 'TR-34', phone: '+90537' });
+    const r = await A({ name: 'M K', address1: 'Nişanca mah.', city: 'Fatih', provinceCode: 'TR-34', phone: '+905370630447' });
     const u = await K.updateGeliverAddress('tok', 'sh1', r.address, dist);
     assert.strictEqual(global.PATCHED.recipientAddress.districtID, 1001); assert.strictEqual(u.district, 'Fatih');
   });
